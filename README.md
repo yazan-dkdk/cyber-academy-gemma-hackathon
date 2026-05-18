@@ -1,6 +1,6 @@
 # Vincere Cryptex — Cyber Academy Web
 
-Vincere Cryptex is a hackathon-ready cybersecurity learning platform for guided courses, lessons, challenges, student progress tracking, and a hybrid AI Tutor. The tutor runs local Gemma through Ollama first, with Gemini available as a fallback provider when configured.
+Vincere Cryptex is a hackathon-ready cybersecurity learning platform for guided courses, lessons, challenges, student progress tracking, and a hybrid AI Tutor. The tutor runs local Gemma through Ollama first, with a Google AI Studio cloud fallback intended for Gemma-family compatible models when configured.
 
 ## Highlights
 
@@ -8,8 +8,9 @@ Vincere Cryptex is a hackathon-ready cybersecurity learning platform for guided 
 - Student authentication with email verification and HttpOnly cookie sessions.
 - Lesson support for `TEXT`, `VIDEO`, and `HYBRID` content modes.
 - AI Tutor embedded inside lessons for contextual learning help.
-- Local Gemma inference through Ollama.
-- Gemini API fallback for hosted model responses.
+- Local AI inference through Ollama + Gemma.
+- Google AI Studio fallback for Gemma-family compatible hosted model responses.
+- Local-first educational inference architecture for classroom and demo environments.
 - AI safety guard that refuses requests for flags, malware, exploit payloads, credential theft, and abusive use.
 - Backend-backed challenge flag submission with progress, badge, and activity updates.
 - Dashboard with activity feed, achievements, and learning momentum.
@@ -24,7 +25,7 @@ Vincere Cryptex is a hackathon-ready cybersecurity learning platform for guided 
 | Database | PostgreSQL |
 | ORM | Prisma |
 | Sessions | Redis + HttpOnly cookies |
-| AI | Ollama local Gemma + Gemini fallback |
+| AI | Ollama local Gemma + Google AI Studio Gemma-family fallback |
 
 ## Repository Structure
 
@@ -47,7 +48,7 @@ Login → Dashboard → Course → Lesson → AI Tutor → Challenge → Flag Su
 - PostgreSQL
 - Redis
 - Ollama
-- Optional Gemini API key for fallback responses
+- Optional Google AI Studio API key for Gemma-family fallback responses
 
 ### 1. Configure environment files
 
@@ -77,7 +78,7 @@ Update local values for:
 - `OLLAMA_BASE_URL`
 - `OLLAMA_MODEL`
 - `GEMINI_ENABLED`
-- `GEMMA_API_KEY` and `GEMMA_MODEL` when using Gemini fallback
+- `GEMMA_API_KEY` and `GEMMA_MODEL` when using the Google AI Studio Gemma-family fallback
 
 For the default local app flow, the backend runs on `http://localhost:3000` and the frontend runs on `http://localhost:3001`.
 
@@ -99,12 +100,12 @@ OLLAMA_MODEL=gemma-local
 AI_PROVIDER_PRIORITY=ollama,gemini
 ```
 
-To enable Gemini fallback, also configure:
+To enable the Google AI Studio Gemma-family fallback, also configure:
 
 ```env
 GEMINI_ENABLED=true
-GEMMA_API_KEY=your_gemini_api_key_here
-GEMMA_MODEL=gemini_model_name_here
+GEMMA_API_KEY=your_google_ai_studio_key_here
+GEMMA_MODEL=gemma-2b-it
 ```
 
 ### 3. Install and run the backend
@@ -136,6 +137,5 @@ Open `http://localhost:3001`.
 
 - Real `.env` files, API keys, session secrets, mail credentials, and local model files must stay out of Git.
 - Challenge flags are submitted to the backend; the frontend does not act as the source of truth.
-- The AI Tutor is designed for defensive, educational support and includes request and response safety checks.
+- The AI Tutor is designed for defensive, educational support, runs local-first through Ollama + Gemma, and includes request and response safety checks.
 - The Labs page is a preview for future isolated Docker labs. It is intentionally marked Coming Soon and should not be presented as functional in this demo.
-
