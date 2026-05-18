@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Login | Vincere Cryptex</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-background": "#e0e2ee",
+                    "error-container": "#93000a",
+                    "background": "#10131c",
+                    "on-primary": "#00363a",
+                    "on-tertiary": "#5f004f",
+                    "outline-variant": "#3b494b",
+                    "primary": "#dbfcff",
+                    "on-error-container": "#ffdad6",
+                    "secondary-fixed": "#f0dbff",
+                    "inverse-primary": "#006970",
+                    "secondary": "#ddb7ff",
+                    "on-secondary-fixed": "#2c0051",
+                    "inverse-surface": "#e0e2ee",
+                    "tertiary-fixed": "#ffd8ee",
+                    "secondary-fixed-dim": "#ddb7ff",
+                    "on-primary-container": "#006970",
+                    "on-secondary": "#490080",
+                    "on-tertiary-fixed-variant": "#860070",
+                    "on-surface": "#e0e2ee",
+                    "on-tertiary-container": "#b00094",
+                    "on-secondary-container": "#d6a9ff",
+                    "on-error": "#690005",
+                    "tertiary": "#fff2f7",
+                    "surface-tint": "#00dbe9",
+                    "error": "#ffb4ab",
+                    "surface-bright": "#363942",
+                    "on-primary-fixed": "#002022",
+                    "outline": "#849495",
+                    "surface-container-lowest": "#0b0e16",
+                    "surface-container-highest": "#31353e",
+                    "secondary-container": "#6f00be",
+                    "surface": "#10131c",
+                    "on-primary-fixed-variant": "#004f54",
+                    "surface-dim": "#10131c",
+                    "primary-fixed": "#7df4ff",
+                    "surface-container-high": "#272a33",
+                    "on-tertiary-fixed": "#3a0030",
+                    "surface-variant": "#31353e",
+                    "tertiary-fixed-dim": "#ffade3",
+                    "surface-container-low": "#181b24",
+                    "inverse-on-surface": "#2d3039",
+                    "tertiary-container": "#ffcaea",
+                    "primary-fixed-dim": "#00dbe9",
+                    "surface-container": "#1c1f28",
+                    "on-secondary-fixed-variant": "#6900b3",
+                    "primary-container": "#00f0ff",
+                    "on-surface-variant": "#b9cacb"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0px",
+                    "lg": "0px",
+                    "xl": "0px",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Manrope"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #070A12;
+            color: #e0e2ee;
+            font-family: 'Manrope', sans-serif;
+        }
+        .cyber-grid {
+            background-image: linear-gradient(rgba(0, 240, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        .glass-panel {
+            background: rgba(16, 19, 28, 0.6);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(168, 85, 247, 0.15);
+        }
+        .corner-bracket {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-color: #A855F7;
+        }
+        .corner-tl { top: 0; left: 0; border-top: 2px solid; border-left: 2px solid; }
+        .corner-br { bottom: 0; right: 0; border-bottom: 2px solid; border-right: 2px solid; }
+        .pulse-glow:hover {
+            box-shadow: 0 0 25px rgba(168, 85, 247, 0.6);
+            transform: scale(0.98);
+        }
+    </style>
+<style>
+    @keyframes pulse-glow {
+        0%, 100% { filter: brightness(1) drop-shadow(0 0 15px rgba(0, 240, 255, 0.4)); }
+        50% { filter: brightness(1.2) drop-shadow(0 0 25px rgba(0, 240, 255, 0.7)); }
+    }
+    .cryptex-enhanced {
+        opacity: 0.7;
+        transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: pulse-glow 4s ease-in-out infinite;
+        filter: brightness(0.9) saturate(1.2);
+    }
+    .cryptex-enhanced:hover {
+        opacity: 1;
+        transform: scale(1.04);
+        filter: brightness(1.3) saturate(1.8) drop-shadow(0 0 40px rgba(0, 240, 255, 0.6)) drop-shadow(0 0 60px rgba(168, 85, 247, 0.4));
+    }
+    /* Ambient reflection on the container */
+    section.hidden.md\:flex.md\:w-1\/2::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at center, rgba(0, 240, 255, 0.05) 0%, transparent 70%);
+        pointer-events: none;
+        transition: opacity 0.8s ease;
+        opacity: 0.5;
+    }
+    section.hidden.md\:flex.md\:w-1\/2:hover::after {
+        opacity: 1;
+        background: radial-gradient(circle at center, rgba(0, 240, 255, 0.15) 0%, rgba(168, 85, 247, 0.05) 50%, transparent 80%);
+    }
+</style><style>
+    .glow-purple-subtle {
+        color: #fff;
+        text-shadow: 
+            0 0 4px rgba(168, 85, 247, 0.8),
+            0 0 10px rgba(168, 85, 247, 0.4),
+            0 0 20px rgba(168, 85, 247, 0.2);
+        filter: brightness(1.1);
+    }
+    .glow-cyan-vibrant {
+        color: #fff;
+        text-shadow: 
+            0 0 2px #fff,
+            0 0 6px #00F0FF,
+            0 0 12px #00F0FF,
+            0 0 25px rgba(0, 240, 255, 0.6),
+            0 0 40px rgba(0, 240, 255, 0.3);
+        filter: brightness(1.2);
+    }
+</style><style>
+    .cyber-input {
+        border: 1px solid rgba(168, 85, 247, 0.2);
+        transition: all 0.3s ease;
+    }
+    .cyber-input:hover {
+        border-color: rgba(168, 85, 247, 0.5);
+        box-shadow: 0 0 10px rgba(168, 85, 247, 0.1);
+    }
+    .cyber-input:focus {
+        border-color: #A855F7 !important;
+        box-shadow: 0 0 15px rgba(168, 85, 247, 0.4), inset 0 0 5px rgba(168, 85, 247, 0.2);
+        background-color: rgba(168, 85, 247, 0.05);
+    }
+
+    .social-btn-enhanced {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid rgba(168, 85, 247, 0.15);
+        background: rgba(16, 19, 28, 0.4);
+    }
+    .social-btn-enhanced:hover {
+        transform: scale(1.03);
+        border-color: #A855F7;
+        box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+        background: rgba(168, 85, 247, 0.05);
+    }
+    .social-btn-enhanced:hover .material-symbols-outlined {
+        filter: brightness(1.5) drop-shadow(0 0 5px #A855F7);
+    }
+    .social-btn-enhanced:active {
+        transform: scale(0.98);
+        box-shadow: 0 0 30px rgba(168, 85, 247, 0.6);
+        transition: all 0.1s;
+    }
+</style></head>
+<body class="min-h-screen flex flex-col selection:bg-secondary-container selection:text-white">
+<!-- TopNavBar (Suppressed for focused login task as per logic, but usually present. Since prompt asks for split screen login, I'll keep the shell focused on the task) -->
+<main class="flex-grow flex flex-col md:flex-row min-h-screen">
+<!-- Left Visual Panel -->
+<section class="hidden md:flex md:w-1/2 relative overflow-hidden bg-surface-container-lowest">
+<div class="absolute inset-0 cyber-grid opacity-30"></div>
+<img class="absolute inset-0 w-full h-full object-cover mix-blend-lighten opacity-70 transition-all duration-700 ease-in-out cryptex-enhanced" data-alt="A futuristic metallic cryptex cylinder with glowing neon runic symbols in a cyberpunk style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAhu9i1PKWY_77SOJClgnpNAsEPe20KxgN4iKQ3bQoOE662ABELu082o96p7tOK3eKrHL2Mx65pnBYapkSrdXbHECfwtRU-X_2J7pJNAWq4LwHLYjw12kdZ1oFFjCWUNGwwYHf27QsZxT53tCps4zdzkjs3JhFVLYLDLq12ctAgNVYVVQmDLPZW8tIA9tZqdBX4nTNpq-GpL7EsVZAu-rWLAYmVaV2U0B-g8p1qr0c8IU9bTKsrhpo5IOWqlLr9WBqbwXPMZq3juWU"/>
+<div class="relative z-10 p-12 flex flex-col justify-end h-full">
+<div class="max-w-md">
+<h2 class="text-5xl font-bold font-headline tracking-tighter text-white mb-4"><span class="glow-purple-subtle">UNLOCK THE</span><br/><span class="glow-cyan-vibrant">VINCERE CRYPTEX</span></h2>
+<p class="text-on-surface-variant text-lg font-body leading-relaxed">Access the elite cyber-warfare training environment. Real-world labs, high-stakes challenges, and global leaderboard dominance.</p>
+</div>
+</div>
+<!-- Tactical Accents -->
+<div class="absolute top-12 left-12 w-24 h-1 bg-secondary shadow-[0_0_15px_rgba(168,85,247,0.5)]"></div>
+</section>
+<!-- Right Form Panel -->
+<section class="w-full md:w-1/2 flex items-center justify-center p-6 md:p-12 relative">
+<div class="w-full max-w-md relative">
+<!-- Decorative background glow -->
+<div class="absolute -top-24 -right-24 w-64 h-64 bg-secondary/10 rounded-full blur-[100px]"></div>
+<div class="glass-panel p-8 md:p-12 relative">
+<!-- Brackets -->
+<div class="corner-bracket corner-tl"></div>
+<div class="corner-bracket corner-br"></div>
+<div class="mb-10">
+<h1 class="text-3xl font-headline font-bold text-on-surface tracking-tight">Sign in to Vincere Cryptex</h1>
+<p class="text-on-surface-variant font-body mt-2 text-sm">AUTHENTICATION PROTOCOL v4.0</p>
+</div>
+<form class="space-y-6">
+<!-- Email Input -->
+<div class="space-y-2">
+<label class="block text-[10px] font-headline font-bold tracking-[0.2em] text-on-surface-variant uppercase">Operator Identifier</label>
+<input class="w-full bg-surface-container-highest focus:ring-2 focus:ring-secondary/50 p-4 text-on-surface placeholder:text-on-surface-variant/40 transition-all duration-300 font-body outline-none cyber-input" placeholder="operator@vincere.io" type="email"/>
+</div>
+<!-- Password Input -->
+<div class="space-y-2">
+<label class="block text-[10px] font-headline font-bold tracking-[0.2em] text-on-surface-variant uppercase">Access Key</label>
+<input class="w-full bg-surface-container-highest focus:ring-2 focus:ring-secondary/50 p-4 text-on-surface placeholder:text-on-surface-variant/40 transition-all duration-300 font-body outline-none cyber-input" placeholder="••••••••••••" type="password"/>
+<div class="flex justify-end">
+<a class="text-xs font-body text-secondary hover:text-secondary-fixed transition-colors" href="#">Forgot password?</a>
+</div>
+</div>
+<!-- Sign In Button -->
+<button class="w-full py-4 bg-secondary-container text-white font-headline font-bold tracking-widest uppercase text-sm pulse-glow transition-all duration-300 shadow-[0_0_20px_rgba(111,0,190,0.3)]" type="submit">
+                            Sign in
+                        </button>
+</form>
+<!-- Divider -->
+<div class="relative my-10 flex items-center">
+<div class="flex-grow border-t border-outline-variant/30"></div>
+<span class="mx-4 text-[10px] font-headline font-bold text-on-surface-variant/60 tracking-[0.2em]">OR CONTINUE WITH</span>
+<div class="flex-grow border-t border-outline-variant/30"></div>
+</div>
+<!-- Social Buttons -->
+<div class="grid grid-cols-1 gap-3">
+<button class="flex items-center justify-center gap-3 w-full py-3 border hover:bg-surface-container-high transition-all text-on-surface font-body text-sm social-btn-enhanced">
+<span class="material-symbols-outlined text-lg">public</span>
+                            Continue with Google
+                        </button>
+<button class="flex items-center justify-center gap-3 w-full py-3 border hover:bg-surface-container-high transition-all text-on-surface font-body text-sm social-btn-enhanced">
+<span class="material-symbols-outlined text-lg">share</span>
+                            Continue with LinkedIn
+                        </button>
+<button class="flex items-center justify-center gap-3 w-full py-3 border hover:bg-surface-container-high transition-all text-on-surface font-body text-sm social-btn-enhanced">
+<span class="material-symbols-outlined text-lg">code</span>
+                            Continue with GitHub
+                        </button>
+</div>
+<!-- Bottom Link -->
+<div class="mt-10 text-center">
+<p class="text-sm font-body text-on-surface-variant">
+                            New to Vincere Cryptex? <a class="text-secondary font-bold hover:underline decoration-secondary/30" href="#">Create Account</a>
+</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer Cluster -->
+<footer class="bg-[#10131c] w-full border-t border-[#3b494b]/15">
+<div class="flex flex-col md:flex-row justify-between items-center px-12 py-8 w-full">
+<div class="mb-4 md:mb-0">
+<span class="text-lg font-bold text-[#e0e2ee] font-headline tracking-tight">Vincere Cryptex</span>
+<p class="text-xs text-[#e0e2ee]/50 font-body mt-1">© 2024 Vincere Cryptex. All rights reserved.</p>
+</div>
+<div class="flex gap-8">
+<a class="text-[10px] font-headline font-bold text-[#e0e2ee]/50 hover:text-[#00F0FF] transition-colors uppercase tracking-widest" href="#">Terms</a>
+<a class="text-[10px] font-headline font-bold text-[#e0e2ee]/50 hover:text-[#00F0FF] transition-colors uppercase tracking-widest" href="#">Privacy</a>
+<a class="text-[10px] font-headline font-bold text-[#e0e2ee]/50 hover:text-[#00F0FF] transition-colors uppercase tracking-widest" href="#">Contact</a>
+<a class="text-[10px] font-headline font-bold text-[#e0e2ee]/50 hover:text-[#00F0FF] transition-colors uppercase tracking-widest" href="#">Documentation</a>
+</div>
+</div>
+</footer>
+</body></html>

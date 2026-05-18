@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vincere Cryptex - Student Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                            "on-primary-container": "#006970",
+                            "tertiary-fixed": "#dee2f4",
+                            "on-primary-fixed": "#002022",
+                            "surface-tint": "#00dbe9",
+                            "on-error-container": "#ffdad6",
+                            "surface-container-highest": "#31353e",
+                            "on-background": "#e0e2ee",
+                            "on-tertiary": "#2b303e",
+                            "primary-fixed": "#7df4ff",
+                            "inverse-surface": "#e0e2ee",
+                            "on-tertiary-fixed-variant": "#424655",
+                            "primary": "#dbfcff",
+                            "on-primary": "#00363a",
+                            "secondary-fixed": "#f0dbff",
+                            "primary-fixed-dim": "#00dbe9",
+                            "on-error": "#690005",
+                            "surface-container-high": "#272a33",
+                            "outline": "#849495",
+                            "surface-container-lowest": "#0b0e16",
+                            "surface-bright": "#363942",
+                            "on-surface-variant": "#b9cacb",
+                            "background": "#10131c",
+                            "surface-dim": "#10131c",
+                            "on-secondary-fixed": "#2c0051",
+                            "secondary-fixed-dim": "#ddb7ff",
+                            "surface": "#10131c",
+                            "inverse-primary": "#006970",
+                            "surface-variant": "#31353e",
+                            "on-surface": "#e0e2ee",
+                            "on-primary-fixed-variant": "#004f54",
+                            "outline-variant": "#3b494b",
+                            "on-secondary": "#490080",
+                            "tertiary-container": "#d5d9eb",
+                            "error-container": "#93000a",
+                            "on-tertiary-container": "#5a5e6e",
+                            "surface-container-low": "#181b24",
+                            "secondary-container": "#6f00be",
+                            "secondary": "#ddb7ff",
+                            "tertiary": "#f5f5ff",
+                            "primary-container": "#00f0ff",
+                            "error": "#ffb4ab",
+                            "surface-container": "#1c1f28",
+                            "on-tertiary-fixed": "#161b28",
+                            "inverse-on-surface": "#2d3039",
+                            "on-secondary-fixed-variant": "#6900b3",
+                            "on-secondary-container": "#d6a9ff",
+                            "tertiary-fixed-dim": "#c2c6d8"
+                    },
+                    "borderRadius": {
+                            "DEFAULT": "0.25rem",
+                            "lg": "0.5rem",
+                            "xl": "0.75rem",
+                            "full": "9999px"
+                    },
+                    "spacing": {
+                            "margin-side": "40px",
+                            "unit": "8px",
+                            "section-gap": "120px",
+                            "gutter": "24px",
+                            "element-gap": "16px",
+                            "container-max": "1280px"
+                    },
+                    "fontFamily": {
+                            "display-lg": ["Space Grotesk", "sans-serif"],
+                            "headline-md": ["Space Grotesk", "sans-serif"],
+                            "body-lg": ["Inter", "sans-serif"],
+                            "display-xl": ["Space Grotesk", "sans-serif"],
+                            "body-md": ["Inter", "sans-serif"],
+                            "label-mono": ["Space Grotesk", "monospace"]
+                    },
+                    "fontSize": {
+                            "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                            "headline-md": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                            "body-lg": ["18px", {"lineHeight": "1.6", "letterSpacing": "0em", "fontWeight": "400"}],
+                            "display-xl": ["72px", {"lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "700"}],
+                            "body-md": ["16px", {"lineHeight": "1.6", "letterSpacing": "0em", "fontWeight": "400"}],
+                            "label-mono": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.15em", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #070A12;
+            background-image: 
+                linear-gradient(rgba(0, 219, 233, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 219, 233, 0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        .tactical-corner {
+            position: relative;
+        }
+        
+        .tactical-corner::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: -1px;
+            width: 16px;
+            height: 16px;
+            border-top: 2px solid theme('colors.primary-container');
+            border-left: 2px solid theme('colors.primary-container');
+            z-index: 10;
+        }
+        
+        .tactical-corner::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            right: -1px;
+            width: 16px;
+            height: 16px;
+            border-bottom: 2px solid theme('colors.primary-container');
+            border-right: 2px solid theme('colors.primary-container');
+            z-index: 10;
+        }
+
+        .glass-panel {
+            background: rgba(24, 27, 36, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(0, 219, 233, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .neon-glow {
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
+        }
+
+        .neon-text-glow {
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        }
+        
+        .purple-glow {
+            box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+        }
+
+        /* Glitch hover effect */
+        .glitch-hover:hover {
+            animation: glitch-skew 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+            background-color: rgba(0, 240, 255, 0.1);
+        }
+        
+        @keyframes glitch-skew {
+            0% { transform: skew(0deg); }
+            20% { transform: skew(-5deg); }
+            40% { transform: skew(5deg); }
+            60% { transform: skew(-2deg); }
+            80% { transform: skew(2deg); }
+            100% { transform: skew(0deg); }
+        }
+    </style>
+</head>
+<body class="text-on-surface min-h-screen flex flex-col font-body-md">
+<!-- TopNavBar (Shared Component) -->
+<nav class="bg-surface/80 backdrop-blur-md dark:bg-surface/80 docked full-width top-0 sticky z-50 border-b border-outline-variant/30 shadow-[0_0_15px_rgba(0,219,233,0.1)]">
+<div class="flex justify-between items-center w-full px-margin-side h-16 max-w-container-max mx-auto">
+<!-- Brand Logo -->
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-fixed-dim" style="font-variation-settings: 'FILL' 1;">terminal</span>
+<span class="font-display-lg text-headline-md font-bold tracking-tighter text-primary-fixed-dim dark:text-primary-fixed-dim">VINCERE CRYPTEX</span>
+</div>
+<!-- Navigation Links -->
+<div class="hidden md:flex items-center gap-8">
+<a class="text-on-surface-variant hover:text-primary transition-all duration-300 font-label-mono text-label-mono uppercase tracking-widest hover:bg-primary/10 hover:text-primary-container transition-colors duration-200 px-3 py-2 rounded" href="#">Courses</a>
+<a class="text-on-surface-variant hover:text-primary transition-all duration-300 font-label-mono text-label-mono uppercase tracking-widest hover:bg-primary/10 hover:text-primary-container transition-colors duration-200 px-3 py-2 rounded" href="#">Labs</a>
+<a class="text-on-surface-variant hover:text-primary transition-all duration-300 font-label-mono text-label-mono uppercase tracking-widest hover:bg-primary/10 hover:text-primary-container transition-colors duration-200 px-3 py-2 rounded" href="#">Challenges</a>
+<a class="text-on-surface-variant hover:text-primary transition-all duration-300 font-label-mono text-label-mono uppercase tracking-widest hover:bg-primary/10 hover:text-primary-container transition-colors duration-200 px-3 py-2 rounded" href="#">Learning Paths</a>
+</div>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-4">
+<button class="text-primary font-bold border-b-2 border-primary-container pb-1 font-label-mono text-label-mono uppercase px-2 hover:bg-primary/10 hover:text-primary-container transition-colors duration-200">Dashboard</button>
+<button class="flex items-center gap-2 px-4 py-1.5 border border-outline-variant/50 rounded text-on-surface-variant hover:text-primary hover:border-primary/50 transition-all duration-300 font-label-mono text-label-mono">
+<span class="material-symbols-outlined text-[18px]">account_circle</span>
+                    SIGN OUT
+                </button>
+</div>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-grow w-full max-w-container-max mx-auto px-margin-side py-8 flex flex-col gap-8">
+<!-- HUD Overlay Elements -->
+<div class="fixed top-24 left-4 font-label-mono text-label-mono text-primary-fixed-dim/30 pointer-events-none z-0 hidden lg:block">SYS.OP: STDT_DASHBOARD<br/>COORD: 45.92.11.0</div>
+<div class="fixed bottom-24 right-4 font-label-mono text-label-mono text-primary-fixed-dim/30 pointer-events-none z-0 hidden lg:block text-right">SEC_LVL: ALPHA<br/>NET_STAT: SECURE</div>
+<!-- Hero / Daily Training Overview -->
+<section class="glass-panel tactical-corner p-8 rounded-lg relative overflow-hidden z-10">
+<!-- Background Decorative Element -->
+<div class="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-primary/10 to-transparent opacity-50 pointer-events-none"></div>
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
+<div class="flex flex-col gap-2">
+<h1 class="font-display-lg text-display-lg text-on-surface neon-text-glow">Welcome back, Student</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">Continue your cybersecurity path and improve your defensive skills today.</p>
+</div>
+<div class="flex flex-col items-end gap-1">
+<span class="font-label-mono text-label-mono text-primary-container">CURRENT RANK</span>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">military_tech</span>
+<span class="font-headline-md text-headline-md text-on-surface">Rookie Defender</span>
+</div>
+</div>
+</div>
+<!-- Data Row -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-outline-variant/30 relative z-10">
+<div class="flex flex-col gap-1">
+<span class="font-label-mono text-label-mono text-on-surface-variant uppercase">Current Path</span>
+<span class="font-body-lg text-body-lg text-primary font-semibold">Blue Team Foundations</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="font-label-mono text-label-mono text-on-surface-variant uppercase">Daily Goal</span>
+<span class="font-body-lg text-body-lg text-on-surface">1 lesson / 1 challenge</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="font-label-mono text-label-mono text-on-surface-variant uppercase">Current Streak</span>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-orange-400" style="font-variation-settings: 'FILL' 1;">local_fire_department</span>
+<span class="font-body-lg text-body-lg text-on-surface">3 days</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<span class="font-label-mono text-label-mono text-on-surface-variant uppercase">Total XP</span>
+<span class="font-body-lg text-body-lg text-secondary">1240 XP</span>
+</div>
+</div>
+</section>
+<!-- Main Content Area (Two Columns) -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10">
+<!-- Left Column (66%) -->
+<div class="lg:col-span-2 flex flex-col gap-6">
+<!-- Continue Learning (Large Dominant Card) -->
+<section class="glass-panel tactical-corner p-6 rounded-lg relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-primary-container/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+<div class="flex justify-between items-center mb-6">
+<h2 class="font-headline-md text-headline-md text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container">play_circle</span>
+                            Continue Learning
+                        </h2>
+<span class="font-label-mono text-label-mono bg-surface-container-high px-2 py-1 rounded text-on-surface-variant border border-outline-variant/50">COURSE</span>
+</div>
+<div class="flex flex-col md:flex-row gap-6">
+<!-- Image placeholder -->
+<div class="w-full md:w-1/3 aspect-video bg-surface-container-high rounded border border-outline-variant/30 overflow-hidden relative">
+<img alt="A stylized, glowing isometric 3D rendering of a secure server room bathed in cyan and deep blue light. The aesthetic is high-tech cyberpunk with sharp lines, metallic surfaces, and subtle lens flares indicating active data streams." class="w-full h-full object-cover opacity-80" data-alt="A stylized, glowing isometric 3D rendering of a secure server room bathed in cyan and deep blue light. The aesthetic is high-tech cyberpunk with sharp lines, metallic surfaces, and subtle lens flares indicating active data streams." src="https://lh3.googleusercontent.com/aida/ADBb0uia5l-YP4cp3I1rJgENCHEwzTBV86I9JZORlsN5jbXY-nPqA9zFcNGc7tN301K2ULSwuSgS-NVISgq89Hi8LKYXkzVPB9DMqdJHG-IS4zWHixONVsgl7gRgDlaArpRssyhf6DdxsPSvHKYm5ren855hkyMKiHX3r0rr1WOHr3SrSTIEYgRCtYzmakHrQ8EAr-a9tO9Rx9NgxFv7t7qfDJapPm6NWmtm5w6YqVjbUpBB5MIoD9S1rGTI7A"/>
+<div class="absolute inset-0 bg-primary/10 mix-blend-overlay"></div>
+</div>
+<div class="flex-1 flex flex-col justify-between">
+<div>
+<span class="font-label-mono text-label-mono text-on-surface-variant">Network Defense Foundations</span>
+<h3 class="font-headline-md text-[24px] text-on-surface mt-1 mb-4 leading-tight">Firewall Rule Hygiene</h3>
+<div class="flex items-center justify-between mb-2">
+<span class="font-label-mono text-label-mono text-primary-container">PROGRESS</span>
+<span class="font-label-mono text-label-mono text-on-surface">72%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-2 mb-4 overflow-hidden border border-outline-variant/20">
+<div class="bg-primary-container h-2 rounded-full neon-glow relative" style="width: 72%">
+<div class="absolute top-0 right-0 bottom-0 w-4 bg-white/30 animate-pulse"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between mt-4 border-t border-outline-variant/30 pt-4">
+<div class="flex gap-4">
+<div class="flex items-center gap-1 font-label-mono text-label-mono text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">task_alt</span>
+                                        4/6 Lessons
+                                    </div>
+<div class="flex items-center gap-1 font-label-mono text-label-mono text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+                                        18 min left
+                                    </div>
+</div>
+<button class="bg-primary-container text-on-primary-container font-label-mono text-label-mono px-6 py-2 rounded hover:bg-primary transition-colors neon-glow font-bold uppercase tracking-wide">Continue Lesson</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Skill Progress (Grid/List of bars) -->
+<section class="glass-panel p-6 rounded-lg">
+<h2 class="font-headline-md text-[24px] text-on-surface mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">radar</span>
+                        Skill Matrix
+                    </h2>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+<!-- Skill 1 -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-end">
+<span class="font-body-md text-body-md text-on-surface">Network Defense</span>
+<span class="font-label-mono text-label-mono text-primary-container">78%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-none h-1.5 overflow-hidden">
+<div class="bg-primary-container h-full" style="width: 78%"></div>
+</div>
+</div>
+<!-- Skill 2 -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-end">
+<span class="font-body-md text-body-md text-on-surface">Web Security</span>
+<span class="font-label-mono text-label-mono text-primary-container">42%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-none h-1.5 overflow-hidden">
+<div class="bg-primary-container h-full opacity-60" style="width: 42%"></div>
+</div>
+</div>
+<!-- Skill 3 -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-end">
+<span class="font-body-md text-body-md text-on-surface">Phishing Analysis</span>
+<span class="font-label-mono text-label-mono text-primary-container">65%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-none h-1.5 overflow-hidden">
+<div class="bg-primary-container h-full opacity-80" style="width: 65%"></div>
+</div>
+</div>
+<!-- Skill 4 -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-end">
+<span class="font-body-md text-body-md text-on-surface">Incident Response</span>
+<span class="font-label-mono text-label-mono text-on-surface-variant">25%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-none h-1.5 overflow-hidden">
+<div class="bg-outline h-full" style="width: 25%"></div>
+</div>
+</div>
+<!-- Skill 5 -->
+<div class="flex flex-col gap-2 md:col-span-2">
+<div class="flex justify-between items-end">
+<span class="font-body-md text-body-md text-on-surface">Secure Configuration</span>
+<span class="font-label-mono text-label-mono text-primary-container">55%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-none h-1.5 overflow-hidden">
+<div class="bg-primary-container h-full opacity-70" style="width: 55%"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Learning Path Roadmap -->
+<section class="glass-panel p-6 rounded-lg overflow-x-auto">
+<h2 class="font-headline-md text-[24px] text-on-surface mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-fixed">route</span>
+                        Path Roadmap
+                    </h2>
+<div class="flex items-center min-w-max py-4 px-2">
+<!-- Node 1 (Completed) -->
+<div class="flex flex-col items-center relative w-32 group">
+<div class="w-8 h-8 rounded-full border-2 border-primary-container bg-primary-container/20 flex items-center justify-center z-10 neon-glow mb-2">
+<span class="material-symbols-outlined text-[16px] text-primary-container" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<span class="font-label-mono text-label-mono text-primary-container text-center">Network Basics</span>
+<div class="absolute top-4 left-1/2 w-full h-0.5 bg-primary-container z-0"></div>
+</div>
+<!-- Node 2 (Current) -->
+<div class="flex flex-col items-center relative w-32">
+<div class="w-10 h-10 rounded-full border-2 border-primary-container bg-surface flex items-center justify-center z-10 neon-glow mb-1">
+<div class="w-4 h-4 bg-primary-container rounded-full animate-pulse"></div>
+</div>
+<span class="font-label-mono text-label-mono text-on-surface font-bold text-center">Firewall Rules</span>
+<div class="absolute top-5 left-1/2 w-full h-0.5 bg-outline-variant border-dashed border-t-2 border-outline-variant z-0"></div>
+</div>
+<!-- Node 3 (Next) -->
+<div class="flex flex-col items-center relative w-32">
+<div class="w-8 h-8 rounded-full border-2 border-outline-variant bg-surface flex items-center justify-center z-10 mb-2">
+<span class="material-symbols-outlined text-[16px] text-outline">lock_open</span>
+</div>
+<span class="font-label-mono text-label-mono text-on-surface-variant text-center">Phishing Defense</span>
+<div class="absolute top-4 left-1/2 w-full h-0.5 bg-surface-container-highest z-0"></div>
+</div>
+<!-- Node 4 (Locked) -->
+<div class="flex flex-col items-center relative w-32">
+<div class="w-8 h-8 rounded-full border-2 border-surface-container-highest bg-surface flex items-center justify-center z-10 mb-2">
+<span class="material-symbols-outlined text-[16px] text-surface-container-highest">lock</span>
+</div>
+<span class="font-label-mono text-label-mono text-surface-container-highest text-center">Incident Response</span>
+<div class="absolute top-4 left-1/2 w-full h-0.5 bg-surface-container-highest z-0"></div>
+</div>
+<!-- Node 5 (Locked) -->
+<div class="flex flex-col items-center relative w-32">
+<div class="w-8 h-8 rounded-full border-2 border-surface-container-highest bg-surface flex items-center justify-center z-10 mb-2">
+<span class="material-symbols-outlined text-[16px] text-surface-container-highest">lock</span>
+</div>
+<span class="font-label-mono text-label-mono text-surface-container-highest text-center">SOC Investigation</span>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column (33%) -->
+<div class="flex flex-col gap-6">
+<!-- AI Tutor Guidance (Card) -->
+<section class="glass-panel p-6 rounded-lg border-t-2 border-t-secondary relative overflow-hidden group">
+<!-- Subtle background glow -->
+<div class="absolute -top-10 -right-10 w-32 h-32 bg-secondary/10 rounded-full blur-2xl group-hover:bg-secondary/20 transition-all duration-500"></div>
+<h2 class="font-headline-md text-[20px] text-on-surface mb-3 flex items-center gap-2 relative z-10">
+<span class="material-symbols-outlined text-secondary">smart_toy</span>
+                        AI Tutor Guidance
+                    </h2>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6 relative z-10">Ask for an explanation, safe hint, or next-step recommendation without compromising the learning experience.</p>
+<div class="flex justify-between items-center mb-6 border-b border-outline-variant/30 pb-4 relative z-10">
+<div class="flex flex-col">
+<span class="font-label-mono text-label-mono text-on-surface-variant uppercase">Sessions</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">3</span>
+</div>
+<div class="flex flex-col text-right">
+<span class="font-label-mono text-label-mono text-on-surface-variant uppercase">Safe Hints Used</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">2</span>
+</div>
+</div>
+<button class="w-full py-2.5 border border-secondary text-secondary hover:bg-secondary/10 transition-colors font-label-mono text-label-mono uppercase tracking-widest rounded flex justify-center items-center gap-2 glitch-hover relative z-10">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+                        Ask AI Tutor
+                    </button>
+</section>
+<!-- Active Challenge / Lab (Card) -->
+<section class="glass-panel tactical-corner p-6 rounded-lg">
+<div class="flex justify-between items-start mb-4">
+<h2 class="font-headline-md text-[20px] text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-error">warning</span>
+                            Active Challenge
+                        </h2>
+<span class="w-2 h-2 rounded-full bg-error animate-pulse mt-2" title="In Progress"></span>
+</div>
+<div class="bg-surface-container-highest/50 p-4 rounded border border-outline-variant/30 mb-6">
+<h3 class="font-body-lg text-body-lg text-on-surface font-semibold mb-1">Phishing Awareness Challenge</h3>
+<p class="font-label-mono text-label-mono text-on-surface-variant mb-4">TYPE: Defensive Analysis</p>
+<div class="flex justify-between items-center pt-3 border-t border-outline-variant/20">
+<span class="font-label-mono text-label-mono text-on-surface-variant">STATUS: <span class="text-error">IN PROGRESS</span></span>
+<span class="font-label-mono text-label-mono text-primary-container">100 PTS</span>
+</div>
+</div>
+<button class="w-full py-2.5 bg-surface-container-high border border-outline-variant hover:border-primary-container/50 text-on-surface hover:text-primary-container transition-all font-label-mono text-label-mono uppercase tracking-widest rounded flex justify-center items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">terminal</span>
+                        Continue Challenge
+                    </button>
+</section>
+<!-- Recommended Next Step (Panel) -->
+<section class="bg-surface-container-highest border-l-4 border-primary-container p-5 rounded-r-lg relative overflow-hidden">
+<!-- Scanning line effect -->
+<div class="absolute top-0 left-0 w-full h-[1px] bg-primary-container/30 animate-[scan_3s_ease-in-out_infinite]"></div>
+<style>
+                        @keyframes scan {
+                            0% { top: 0; opacity: 0; }
+                            10% { opacity: 1; }
+                            90% { opacity: 1; }
+                            100% { top: 100%; opacity: 0; }
+                        }
+                    </style>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary-container mt-0.5">assistant_direction</span>
+<div>
+<span class="font-label-mono text-label-mono text-primary-container uppercase block mb-1">Recommended Action</span>
+<p class="font-body-md text-body-md text-on-surface text-sm leading-relaxed">Finish <span class="text-primary-fixed">Firewall Rule Hygiene</span>, then practice the <span class="text-error">Phishing Awareness Challenge</span>.</p>
+</div>
+</div>
+</section>
+</div>
+</div>
+<!-- Bottom Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 relative z-10">
+<!-- Achievements / Badges -->
+<section class="glass-panel p-6 rounded-lg">
+<h2 class="font-headline-md text-[20px] text-on-surface mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-yellow-400">emoji_events</span>
+                    Earned Badges
+                </h2>
+<div class="flex flex-wrap gap-4 items-center">
+<!-- Badge 1 -->
+<div class="w-14 h-14 bg-surface-container-high border border-primary-container/30 rounded-lg rotate-45 flex items-center justify-center group cursor-help relative" title="First Login">
+<span class="material-symbols-outlined -rotate-45 text-on-surface group-hover:text-primary-container transition-colors" style="font-variation-settings: 'FILL' 1;">login</span>
+</div>
+<!-- Badge 2 -->
+<div class="w-14 h-14 bg-surface-container-high border border-primary-container/30 rounded-lg rotate-45 flex items-center justify-center group cursor-help relative" title="Email Verified">
+<span class="material-symbols-outlined -rotate-45 text-on-surface group-hover:text-primary-container transition-colors" style="font-variation-settings: 'FILL' 1;">mark_email_read</span>
+</div>
+<!-- Badge 3 -->
+<div class="w-14 h-14 bg-surface-container-high border border-secondary/50 rounded-lg rotate-45 flex items-center justify-center group cursor-help relative purple-glow" title="First Lesson Complete">
+<span class="material-symbols-outlined -rotate-45 text-secondary transition-colors" style="font-variation-settings: 'FILL' 1;">school</span>
+</div>
+<!-- Badge 4 -->
+<div class="w-14 h-14 bg-surface-container-high border border-primary-container/30 rounded-lg rotate-45 flex items-center justify-center group cursor-help relative" title="AI Tutor Used">
+<span class="material-symbols-outlined -rotate-45 text-on-surface group-hover:text-primary-container transition-colors" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+</div>
+<!-- Badge 5 -->
+<div class="w-14 h-14 bg-surface-container-high border border-primary-container/30 rounded-lg rotate-45 flex items-center justify-center group cursor-help relative" title="Challenge Started">
+<span class="material-symbols-outlined -rotate-45 text-on-surface group-hover:text-primary-container transition-colors" style="font-variation-settings: 'FILL' 1;">sports_esports</span>
+</div>
+<!-- Locked Badge -->
+<div class="w-14 h-14 bg-surface-container-lowest border border-outline-variant/20 rounded-lg rotate-45 flex items-center justify-center opacity-50 ml-4">
+<span class="material-symbols-outlined -rotate-45 text-outline-variant">lock</span>
+</div>
+</div>
+</section>
+<!-- Recent Activity (Timeline) -->
+<section class="glass-panel p-6 rounded-lg">
+<h2 class="font-headline-md text-[20px] text-on-surface mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-fixed-dim">history</span>
+                    System Log
+                </h2>
+<div class="flex flex-col gap-4">
+<!-- Log Item 1 -->
+<div class="flex gap-4">
+<div class="flex flex-col items-center">
+<div class="w-2 h-2 rounded-full bg-primary-container mt-2"></div>
+<div class="w-0.5 h-full bg-outline-variant/30 mt-1"></div>
+</div>
+<div class="pb-2">
+<span class="font-label-mono text-label-mono text-on-surface-variant block mb-1">TODAY, 09:42</span>
+<p class="font-body-md text-body-md text-on-surface text-sm">Completed module: <span class="text-primary-fixed">Network Defense Introduction</span></p>
+</div>
+</div>
+<!-- Log Item 2 -->
+<div class="flex gap-4">
+<div class="flex flex-col items-center">
+<div class="w-2 h-2 rounded-full bg-error mt-2"></div>
+<div class="w-0.5 h-full bg-outline-variant/30 mt-1"></div>
+</div>
+<div class="pb-2">
+<span class="font-label-mono text-label-mono text-on-surface-variant block mb-1">YESTERDAY, 14:15</span>
+<p class="font-body-md text-body-md text-on-surface text-sm">Started <span class="text-error">Phishing Awareness Challenge</span></p>
+</div>
+</div>
+<!-- Log Item 3 -->
+<div class="flex gap-4">
+<div class="flex flex-col items-center">
+<div class="w-2 h-2 rounded-full bg-outline mt-2"></div>
+</div>
+<div>
+<span class="font-label-mono text-label-mono text-on-surface-variant block mb-1">OCT 24, 11:05</span>
+<p class="font-body-md text-body-md text-on-surface text-sm">Account email verified. Security clearance granted.</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Footer (Shared Component) -->
+<footer class="bg-surface-container-lowest dark:bg-surface-container-lowest full-width bottom-0 border-t border-outline-variant/20 mt-auto z-50 relative">
+<div class="flex flex-col md:flex-row justify-between items-center py-unit px-margin-side w-full max-w-container-max mx-auto gap-gutter min-h-[64px]">
+<!-- Copyright -->
+<div class="font-label-mono text-label-mono text-on-surface-variant dark:text-on-surface-variant text-center md:text-left">
+                © 2024 VINCERE CRYPTEX // SECURE TRANSMISSION ESTABLISHED
+            </div>
+<!-- Links -->
+<div class="flex flex-wrap justify-center gap-6">
+<a class="font-label-mono text-label-mono text-on-tertiary-fixed-variant hover:text-primary transition-colors duration-300 hover:underline decoration-primary/50 underline-offset-4 uppercase" href="#">System Status</a>
+<a class="font-label-mono text-label-mono text-on-tertiary-fixed-variant hover:text-primary transition-colors duration-300 hover:underline decoration-primary/50 underline-offset-4 uppercase" href="#">Legal Protocol</a>
+<a class="font-label-mono text-label-mono text-on-tertiary-fixed-variant hover:text-primary transition-colors duration-300 hover:underline decoration-primary/50 underline-offset-4 uppercase" href="#">Privacy Cipher</a>
+<a class="font-label-mono text-label-mono text-on-tertiary-fixed-variant hover:text-primary transition-colors duration-300 hover:underline decoration-primary/50 underline-offset-4 uppercase" href="#">Tactical Support</a>
+</div>
+</div>
+</footer>
+</body></html>

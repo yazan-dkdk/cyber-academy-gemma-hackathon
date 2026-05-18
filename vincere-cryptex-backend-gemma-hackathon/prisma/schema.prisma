@@ -1,0 +1,603 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING_EMAIL_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum SectionStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum LessonStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum LessonContentMode {
+  TEXT
+  VIDEO
+  HYBRID
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum QuizTargetType {
+  COURSE
+  LESSON
+}
+
+enum QuizStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum QuizQuestionType {
+  MCQ
+}
+
+enum QuizAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+}
+
+enum ChallengeStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ChallengeDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum LabStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum LabDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum LabType {
+  CONTAINER
+}
+
+enum LabInstanceStatus {
+  STARTING
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  ERROR
+}
+
+enum ActivityType {
+  COURSE_ENROLLED
+  LESSON_VIEWED
+  LESSON_COMPLETED
+  QUIZ_STARTED
+  QUIZ_SUBMITTED
+  QUIZ_PASSED
+  CHALLENGE_ATTEMPT
+  CHALLENGE_HINT_USED
+  CHALLENGE_SOLVED
+  LAB_STARTED
+  LAB_RESET
+  LAB_TERMINATED
+}
+
+enum EntityType {
+  USER
+  COURSE
+  LESSON
+  QUIZ
+  CHALLENGE
+  LAB
+}
+
+model User {
+  id                      String                   @id @default(uuid()) @db.Uuid
+  email                   String                   @unique @db.VarChar(320)
+  passwordHash            String                   @map("password_hash")
+  role                    UserRole                 @default(STUDENT)
+  status                  UserStatus               @default(PENDING_EMAIL_VERIFICATION)
+  sessionVersion          Int                      @default(0) @map("session_version")
+  emailVerifiedAt         DateTime?                @map("email_verified_at") @db.Timestamptz(6)
+  lastLoginAt             DateTime?                @map("last_login_at") @db.Timestamptz(6)
+  deletedAt               DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  adminMfaConfig          AdminMfaConfig?
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  auditLogsActor          AuditLog[]               @relation("AuditActor")
+  auditLogsTarget         AuditLog[]               @relation("AuditTarget")
+  activityLogs            ActivityLog[]
+  createdCourses          Course[]                 @relation("CourseCreator")
+  enrollments             Enrollment[]
+  lessonProgress          LessonProgress[]
+  quizAttempts            QuizAttempt[]
+  challengeHintUsages     ChallengeHintUsage[]
+  challengeAttempts       ChallengeAttempt[]
+  challengeCompletions    ChallengeCompletion[]
+  labInstances            LabInstance[]
+
+  @@index([deletedAt], map: "idx_users_deleted_at")
+  @@map("users")
+}
+
+model AdminMfaConfig {
+  userId           String    @id @map("user_id") @db.Uuid
+  secretCiphertext String    @map("secret_ciphertext")
+  secretIv         String    @map("secret_iv")
+  secretTag        String    @map("secret_tag")
+  isEnabled        Boolean   @default(false) @map("is_enabled")
+  enabledAt        DateTime? @map("enabled_at") @db.Timestamptz(6)
+  lastVerifiedAt   DateTime? @map("last_verified_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admin_mfa_configs")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_password_reset_tokens_user_id")
+  @@index([expiresAt], map: "idx_password_reset_tokens_expires_at")
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_email_verification_tokens_user_id")
+  @@index([expiresAt], map: "idx_email_verification_tokens_expires_at")
+  @@map("email_verification_tokens")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorUserId  String   @map("actor_user_id") @db.Uuid
+  targetUserId String?  @map("target_user_id") @db.Uuid
+  action       String
+  metadata     Json
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  actorUser    User     @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  targetUser   User?    @relation("AuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId], map: "idx_audit_logs_actor_user_id")
+  @@index([targetUserId], map: "idx_audit_logs_target_user_id")
+  @@index([action], map: "idx_audit_logs_action")
+  @@index([createdAt(sort: Desc)], map: "idx_audit_logs_created_at")
+  @@map("audit_logs")
+}
+
+model ActivityLog {
+  id           String       @id @default(uuid()) @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  activityType ActivityType @map("activity_type")
+  entityType   EntityType   @map("entity_type")
+  entityId     String       @map("entity_id") @db.Uuid
+  metadata     Json
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_activity_logs_user_id")
+  @@index([createdAt(sort: Desc)], map: "idx_activity_logs_created_at")
+  @@map("activity_logs")
+}
+
+model Course {
+  id               String           @id @default(uuid()) @db.Uuid
+  title            String
+  slug             String           @unique @db.VarChar(200)
+  shortDescription String           @map("short_description")
+  description      String
+  level            CourseLevel
+  status           CourseStatus     @default(DRAFT)
+  publishedAt      DateTime?        @map("published_at") @db.Timestamptz(6)
+  createdById      String?          @map("created_by") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy        User?            @relation("CourseCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sections         Section[]
+  enrollments      Enrollment[]
+  lessons          Lesson[]
+  lessonProgress   LessonProgress[]
+  quizzes          Quiz[]
+  quizAttempts     QuizAttempt[]
+
+  @@index([status], map: "idx_courses_status")
+  @@index([level], map: "idx_courses_level")
+  @@map("courses")
+}
+
+model Section {
+  id          String        @id @default(uuid()) @db.Uuid
+  courseId    String        @map("course_id") @db.Uuid
+  title       String
+  position    Int
+  status      SectionStatus @default(DRAFT)
+  publishedAt DateTime?     @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  course      Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+
+  @@unique([courseId, position])
+  @@index([courseId], map: "idx_sections_course_id")
+  @@map("sections")
+}
+
+model Lesson {
+  id                   String            @id @default(uuid()) @db.Uuid
+  courseId             String            @map("course_id") @db.Uuid
+  sectionId            String            @map("section_id") @db.Uuid
+  title                String
+  slug                 String            @db.VarChar(200)
+  summary              String?
+  contentMode          LessonContentMode @map("content_mode")
+  status               LessonStatus      @default(DRAFT)
+  position             Int
+  textContent          String?           @map("text_content")
+  videoProvider        String?           @map("video_provider")
+  videoAssetId         String?           @map("video_asset_id")
+  videoDurationSeconds Int?              @map("video_duration_seconds")
+  publishedAt          DateTime?         @map("published_at") @db.Timestamptz(6)
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  course               Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  section              Section           @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  progressRecords      LessonProgress[]
+  quiz                 Quiz?
+  quizAttempts         QuizAttempt[]
+
+  @@unique([sectionId, position])
+  @@unique([courseId, slug])
+  @@index([courseId], map: "idx_lessons_course_id")
+  @@index([sectionId], map: "idx_lessons_section_id")
+  @@index([slug], map: "idx_lessons_slug")
+  @@index([status], map: "idx_lessons_status")
+  @@map("lessons")
+}
+
+model Enrollment {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  courseId       String           @map("course_id") @db.Uuid
+  status         EnrollmentStatus @default(ACTIVE)
+  enrolledAt     DateTime         @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  completedAt    DateTime?        @map("completed_at") @db.Timestamptz(6)
+  lastAccessedAt DateTime?        @map("last_accessed_at") @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course         Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonProgress LessonProgress[]
+  quizAttempts   QuizAttempt[]
+
+  @@unique([userId, courseId])
+  @@index([userId], map: "idx_enrollments_user_id")
+  @@index([courseId], map: "idx_enrollments_course_id")
+  @@map("enrollments")
+}
+
+model LessonProgress {
+  id                 String     @id @default(uuid()) @db.Uuid
+  enrollmentId       String     @map("enrollment_id") @db.Uuid
+  userId             String     @map("user_id") @db.Uuid
+  courseId           String     @map("course_id") @db.Uuid
+  lessonId           String     @map("lesson_id") @db.Uuid
+  startedAt          DateTime   @default(now()) @map("started_at") @db.Timestamptz(6)
+  lastViewedAt       DateTime   @default(now()) @map("last_viewed_at") @db.Timestamptz(6)
+  scrollPercent      Int        @default(0) @map("scroll_percent")
+  watchPercent       Int        @default(0) @map("watch_percent")
+  readingTimeSeconds Int        @default(0) @map("reading_time_seconds")
+  completedAt        DateTime?  @map("completed_at") @db.Timestamptz(6)
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  enrollment         Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course             Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson             Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId, courseId], map: "idx_lesson_progress_user_course")
+  @@index([enrollmentId], map: "idx_lesson_progress_enrollment_id")
+  @@map("lesson_progress")
+}
+
+model Quiz {
+  id             String         @id @default(uuid()) @db.Uuid
+  courseId       String         @map("course_id") @db.Uuid
+  lessonId       String?        @unique @map("lesson_id") @db.Uuid
+  targetType     QuizTargetType @map("target_type")
+  title          String
+  description    String?
+  status         QuizStatus     @default(DRAFT)
+  passPercentage Int            @default(70) @map("pass_percentage")
+  publishedAt    DateTime?      @map("published_at") @db.Timestamptz(6)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  course         Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson         Lesson?        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions      QuizQuestion[]
+  attempts       QuizAttempt[]
+
+  @@index([status], map: "idx_quizzes_status")
+  @@index([courseId], map: "idx_quizzes_course_id")
+  @@index([lessonId], map: "idx_quizzes_lesson_id")
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id        String              @id @default(uuid()) @db.Uuid
+  quizId    String              @map("quiz_id") @db.Uuid
+  type      QuizQuestionType    @default(MCQ)
+  prompt    String
+  position  Int
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  quiz      Quiz                @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  choices   QuizChoice[]
+  answers   QuizAttemptAnswer[]
+
+  @@unique([quizId, position])
+  @@index([quizId], map: "idx_quiz_questions_quiz_id")
+  @@map("quiz_questions")
+}
+
+model QuizChoice {
+  id                String              @id @default(uuid()) @db.Uuid
+  questionId        String              @map("question_id") @db.Uuid
+  choiceText        String              @map("choice_text")
+  position          Int
+  isCorrect         Boolean             @default(false) @map("is_correct")
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  question          QuizQuestion        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedInAnswers QuizAttemptAnswer[] @relation("SelectedChoice")
+
+  @@unique([questionId, position])
+  @@index([questionId], map: "idx_quiz_choices_question_id")
+  @@map("quiz_choices")
+}
+
+model QuizAttempt {
+  id                String              @id @default(uuid()) @db.Uuid
+  quizId            String              @map("quiz_id") @db.Uuid
+  courseId          String              @map("course_id") @db.Uuid
+  lessonId          String?             @map("lesson_id") @db.Uuid
+  enrollmentId      String              @map("enrollment_id") @db.Uuid
+  userId            String              @map("user_id") @db.Uuid
+  status            QuizAttemptStatus   @default(IN_PROGRESS)
+  passPercentage    Int                 @map("pass_percentage")
+  totalQuestions    Int                 @map("total_questions")
+  answeredQuestions Int                 @default(0) @map("answered_questions")
+  correctAnswers    Int?                @map("correct_answers")
+  scorePercentage   Int?                @map("score_percentage")
+  passed            Boolean?
+  startedAt         DateTime            @default(now()) @map("started_at") @db.Timestamptz(6)
+  submittedAt       DateTime?           @map("submitted_at") @db.Timestamptz(6)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  quiz              Quiz                @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  course            Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson            Lesson?             @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  enrollment        Enrollment          @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers           QuizAttemptAnswer[]
+
+  @@unique([userId, quizId, status], map: "quiz_attempts_user_quiz_status_key")
+  @@index([quizId], map: "idx_quiz_attempts_quiz_id")
+  @@index([userId], map: "idx_quiz_attempts_user_id")
+  @@index([enrollmentId], map: "idx_quiz_attempts_enrollment_id")
+  @@map("quiz_attempts")
+}
+
+model QuizAttemptAnswer {
+  id                 String       @id @default(uuid()) @db.Uuid
+  attemptId          String       @map("attempt_id") @db.Uuid
+  questionId         String       @map("question_id") @db.Uuid
+  selectedChoiceId   String       @map("selected_choice_id") @db.Uuid
+  selectedChoiceText String       @map("selected_choice_text")
+  isCorrect          Boolean      @map("is_correct")
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  attempt            QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question           QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedChoice     QuizChoice   @relation("SelectedChoice", fields: [selectedChoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId], map: "idx_quiz_attempt_answers_attempt_id")
+  @@index([questionId], map: "idx_quiz_attempt_answers_question_id")
+  @@map("quiz_attempt_answers")
+}
+
+model Challenge {
+  id                 String                @id @default(uuid()) @db.Uuid
+  title              String
+  slug               String                @unique @db.VarChar(200)
+  description        String
+  category           String
+  difficulty         ChallengeDifficulty
+  points             Int
+  status             ChallengeStatus       @default(DRAFT)
+  flagHash           String                @map("flag_hash") @db.Char(64)
+  downloadName       String?               @map("download_name")
+  downloadStorageKey String?               @map("download_storage_key")
+  downloadSizeBytes  Int?                  @map("download_size_bytes")
+  publishedAt        DateTime?             @map("published_at") @db.Timestamptz(6)
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  hints              ChallengeHint[]
+  attempts           ChallengeAttempt[]
+  completions        ChallengeCompletion[]
+
+  @@index([status], map: "idx_challenges_status")
+  @@index([category], map: "idx_challenges_category")
+  @@index([difficulty], map: "idx_challenges_difficulty")
+  @@map("challenges")
+}
+
+model ChallengeHint {
+  id          String               @id @default(uuid()) @db.Uuid
+  challengeId String               @map("challenge_id") @db.Uuid
+  position    Int
+  title       String
+  content     String
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  challenge   Challenge            @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  usages      ChallengeHintUsage[]
+
+  @@unique([challengeId, position])
+  @@index([challengeId], map: "idx_challenge_hints_challenge_id")
+  @@map("challenge_hints")
+}
+
+model ChallengeHintUsage {
+  id              String        @id @default(uuid()) @db.Uuid
+  challengeHintId String        @map("challenge_hint_id") @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
+  usedAt          DateTime      @default(now()) @map("used_at") @db.Timestamptz(6)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  challengeHint   ChallengeHint @relation(fields: [challengeHintId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeHintId, userId])
+  @@index([userId], map: "idx_challenge_hint_usages_user_id")
+  @@map("challenge_hint_usages")
+}
+
+model ChallengeAttempt {
+  id                String                @id @default(uuid()) @db.Uuid
+  challengeId       String                @map("challenge_id") @db.Uuid
+  userId            String                @map("user_id") @db.Uuid
+  submittedFlagHash String                @map("submitted_flag_hash") @db.Char(64)
+  isCorrect         Boolean               @map("is_correct")
+  alreadySolved     Boolean               @default(false) @map("already_solved")
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  challenge         Challenge             @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completions       ChallengeCompletion[]
+
+  @@index([challengeId, userId, createdAt(sort: Desc)], map: "idx_challenge_attempts_challenge_user")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_challenge_attempts_user_created_at")
+  @@map("challenge_attempts")
+}
+
+model ChallengeCompletion {
+  id                    String            @id @default(uuid()) @db.Uuid
+  challengeId           String            @map("challenge_id") @db.Uuid
+  userId                String            @map("user_id") @db.Uuid
+  firstCorrectAttemptId String?           @map("first_correct_attempt_id") @db.Uuid
+  pointsAwarded         Int               @map("points_awarded")
+  solvedAt              DateTime          @default(now()) @map("solved_at") @db.Timestamptz(6)
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  challenge             Challenge         @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstCorrectAttempt   ChallengeAttempt? @relation(fields: [firstCorrectAttemptId], references: [id], onDelete: SetNull)
+
+  @@unique([challengeId, userId])
+  @@index([userId, solvedAt(sort: Desc)], map: "idx_challenge_completions_user_id")
+  @@map("challenge_completions")
+}
+
+model Lab {
+  id                String        @id @default(uuid()) @db.Uuid
+  title             String
+  description       String
+  category          String
+  difficulty        LabDifficulty
+  status            LabStatus     @default(DRAFT)
+  type              LabType       @default(CONTAINER)
+  imageReference    String?       @map("image_reference")
+  templateReference String?       @map("template_reference")
+  ttlMinutes        Int           @default(60) @map("ttl_minutes")
+  publishedAt       DateTime?     @map("published_at") @db.Timestamptz(6)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  instances         LabInstance[]
+
+  @@index([status], map: "idx_labs_status")
+  @@index([category], map: "idx_labs_category")
+  @@index([difficulty], map: "idx_labs_difficulty")
+  @@map("labs")
+}
+
+model LabInstance {
+  id           String            @id @default(uuid()) @db.Uuid
+  userId       String            @map("user_id") @db.Uuid
+  labId        String            @map("lab_id") @db.Uuid
+  containerId  String?           @map("container_id")
+  networkId    String?           @map("network_id")
+  proxyToken   String            @unique @map("proxy_token")
+  status       LabInstanceStatus @default(STARTING)
+  startedAt    DateTime          @default(now()) @map("started_at") @db.Timestamptz(6)
+  expiresAt    DateTime          @map("expires_at") @db.Timestamptz(6)
+  terminatedAt DateTime?         @map("terminated_at") @db.Timestamptz(6)
+  resetCount   Int               @default(0) @map("reset_count")
+  errorMessage String?           @map("error_message")
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lab          Lab               @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([userId, labId, startedAt(sort: Desc)], map: "idx_lab_instances_user_lab")
+  @@index([status, expiresAt], map: "idx_lab_instances_status_expires_at")
+  @@map("lab_instances")
+}

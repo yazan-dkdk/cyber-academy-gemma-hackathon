@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Register | Vincere Cryptex</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@200;300;400;500;600;700;800&amp;family=Inter:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-background": "#e0e2ee",
+                    "error-container": "#93000a",
+                    "background": "#10131c",
+                    "on-primary": "#00363a",
+                    "on-tertiary": "#5f004f",
+                    "outline-variant": "#3b494b",
+                    "primary": "#dbfcff",
+                    "on-error-container": "#ffdad6",
+                    "secondary-fixed": "#f0dbff",
+                    "inverse-primary": "#006970",
+                    "secondary": "#ddb7ff",
+                    "on-secondary-fixed": "#2c0051",
+                    "inverse-surface": "#e0e2ee",
+                    "tertiary-fixed": "#ffd8ee",
+                    "secondary-fixed-dim": "#ddb7ff",
+                    "on-primary-container": "#006970",
+                    "on-secondary": "#490080",
+                    "on-tertiary-fixed-variant": "#860070",
+                    "on-surface": "#e0e2ee",
+                    "on-tertiary-container": "#b00094",
+                    "on-secondary-container": "#d6a9ff",
+                    "on-error": "#690005",
+                    "tertiary": "#fff2f7",
+                    "surface-tint": "#00dbe9",
+                    "error": "#ffb4ab",
+                    "surface-bright": "#363942",
+                    "on-primary-fixed": "#002022",
+                    "outline": "#849495",
+                    "surface-container-lowest": "#0b0e16",
+                    "surface-container-highest": "#31353e",
+                    "secondary-container": "#6f00be",
+                    "surface": "#10131c",
+                    "on-primary-fixed-variant": "#004f54",
+                    "surface-dim": "#10131c",
+                    "primary-fixed": "#7df4ff",
+                    "surface-container-high": "#272a33",
+                    "on-tertiary-fixed": "#3a0030",
+                    "surface-variant": "#31353e",
+                    "tertiary-fixed-dim": "#ffade3",
+                    "surface-container-low": "#181b24",
+                    "inverse-on-surface": "#2d3039",
+                    "tertiary-container": "#ffcaea",
+                    "primary-fixed-dim": "#00dbe9",
+                    "surface-container": "#1c1f28",
+                    "on-secondary-fixed-variant": "#6900b3",
+                    "primary-container": "#00f0ff",
+                    "on-surface-variant": "#b9cacb",
+                    "accent-pink": "#FF4FD8"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0px",
+                    "lg": "0px",
+                    "xl": "0px",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Manrope"],
+                    "label": ["Space Grotesk"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .pink-glow-text {
+            text-shadow: 0 0 15px rgba(255, 79, 216, 0.9), 0 0 30px rgba(255, 79, 216, 0.4);
+        }
+        .pink-glow-box:focus-within {
+            box-shadow: 0 0 25px rgba(255, 79, 216, 0.4);
+            border-color: #FF4FD8 !important;
+        }
+        .primary-pink-btn {
+            background-color: #FF4FD8;
+            box-shadow: 0 0 20px rgba(255, 79, 216, 0.6), 0 0 40px rgba(255, 79, 216, 0.2);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .primary-pink-btn:hover {
+            box-shadow: 0 0 35px rgba(255, 79, 216, 0.9), 0 0 60px rgba(255, 79, 216, 0.4);
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+        .primary-pink-btn:active {
+            transform: scale(0.97);
+        }
+        .glass-panel {
+            background: rgba(24, 27, 36, 0.65);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 79, 216, 0.1);
+        }
+        .visual-panel-overlay {
+            background: linear-gradient(to right, rgba(16, 19, 28, 0.3), rgba(16, 19, 28, 0.85));
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .visual-panel-container:hover .visual-panel-overlay {
+            background: linear-gradient(to right, rgba(255, 79, 216, 0.25), rgba(16, 19, 28, 0.6));
+        }
+        .visual-panel-container:hover img {
+            transform: scale(1.05);
+            filter: brightness(1.3) saturate(1.4) contrast(1.1);
+        }
+        .corner-accent {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-color: #FF4FD8;
+            box-shadow: 0 0 10px rgba(255, 79, 216, 0.6);
+        }
+        .corner-tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+        .corner-br { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body min-h-screen flex flex-col selection:bg-accent-pink/30 selection:text-white">
+<main class="flex-grow flex flex-col md:flex-row min-h-screen overflow-hidden">
+<!-- Left Visual Panel -->
+<section class="hidden md:block md:w-1/2 relative overflow-hidden visual-panel-container bg-surface-container-lowest">
+<img alt="Cybersecurity interface" class="absolute inset-0 w-full h-full object-cover transition-all duration-1000 brightness-[0.6] grayscale-[0.3]" data-alt="high-end cinematic cybersecurity visual with complex terminal windows, digital encryption code, and glowing network nodes in neon pink, deep purple, and cyber blue" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAlK4ueGN6bj_apCZJozcd5LSKD9VvNreH9r_H7_afBku5X2APyeZ1_8xS8uMYYtjC1_V2cEAxbaWYJHu7VgUykekXVT6jJNGTbGKb9tNHj1Np72DOkyfJf4GGzGKDsbRxbVHrJVfh_79WsY9hx98rW4DGhCi1Ulj1qUEF-WOJymDYTJsnX-Pdv0pq5nKQPrzyHBhctJ5irtgEKJvY9AyqYoYoSwEB4opdyaLz1A1iV8ONj7CJnZmROGZqZOdacG3Bj4B2OxO-E8ag"/>
+<div class="absolute inset-0 visual-panel-overlay"></div>
+<div class="relative h-full flex flex-col justify-end p-16 z-10">
+<div class="max-w-md">
+<h2 class="font-headline text-5xl font-bold tracking-tighter text-white mb-6 uppercase">Vincere Cryptex</h2>
+<p class="text-on-surface-variant text-lg font-light leading-relaxed">
+                        Join the next generation of tactical cryptographers. Access high-fidelity labs, elite challenges, and master the digital void.
+                    </p>
+</div>
+</div>
+<!-- Tactical Corner Brackets for Panel -->
+<div class="absolute top-8 left-8 w-12 h-12 border-t-2 border-l-2 border-accent-pink/50 shadow-[0_0_15px_rgba(255,79,216,0.4)]"></div>
+<div class="absolute bottom-8 right-8 w-12 h-12 border-b-2 border-r-2 border-accent-pink/50 shadow-[0_0_15px_rgba(255,79,216,0.4)]"></div>
+</section>
+<!-- Right Form Panel -->
+<section class="w-full md:w-1/2 flex items-center justify-center p-8 md:p-16 bg-surface-dim relative">
+<!-- Background Grid Pattern -->
+<div class="absolute inset-0 opacity-[0.04] pointer-events-none" style="background-image: radial-gradient(#FF4FD8 1px, transparent 1px); background-size: 32px 32px;"></div>
+<div class="w-full max-w-md relative z-10">
+<div class="glass-panel p-10 relative">
+<!-- Tactical Accents -->
+<div class="corner-accent corner-tl"></div>
+<div class="corner-accent corner-br"></div>
+<div class="mb-10">
+<span class="font-label text-accent-pink text-xs font-bold tracking-[0.2em] mb-2 block uppercase pink-glow-text">Initialization Sequence</span>
+<h1 class="font-headline text-3xl font-bold text-on-surface tracking-tight">Create Your Account</h1>
+</div>
+<form action="#" class="space-y-6">
+<!-- Full Name -->
+<div class="space-y-2 group">
+<label class="font-label text-on-surface-variant text-[10px] tracking-widest uppercase font-bold group-focus-within:text-accent-pink transition-colors">Identity Designation</label>
+<div class="relative pink-glow-box transition-all">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-sm group-focus-within:text-accent-pink transition-colors">person</span>
+<input class="w-full bg-surface-container-highest border-transparent py-4 pl-12 pr-4 text-on-surface placeholder:text-on-surface-variant/30 focus:ring-0 focus:border-accent-pink transition-all" placeholder="Full Name" required="" type="text"/>
+</div>
+</div>
+<!-- Email -->
+<div class="space-y-2 group">
+<label class="font-label text-on-surface-variant text-[10px] tracking-widest uppercase font-bold group-focus-within:text-accent-pink transition-colors">Data Channel (Email)</label>
+<div class="relative pink-glow-box transition-all">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-sm group-focus-within:text-accent-pink transition-colors">alternate_email</span>
+<input class="w-full bg-surface-container-highest border-transparent py-4 pl-12 pr-4 text-on-surface placeholder:text-on-surface-variant/30 focus:ring-0 focus:border-accent-pink transition-all" placeholder="Email address" required="" type="email"/>
+</div>
+</div>
+<!-- Password -->
+<div class="space-y-2 group">
+<label class="font-label text-on-surface-variant text-[10px] tracking-widest uppercase font-bold group-focus-within:text-accent-pink transition-colors">Encryption Key</label>
+<div class="relative pink-glow-box transition-all">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-sm group-focus-within:text-accent-pink transition-colors">lock</span>
+<input class="w-full bg-surface-container-highest border-transparent py-4 pl-12 pr-4 text-on-surface placeholder:text-on-surface-variant/30 focus:ring-0 focus:border-accent-pink transition-all" placeholder="Password" required="" type="password"/>
+</div>
+</div>
+<!-- Confirm Password -->
+<div class="space-y-2 group">
+<label class="font-label text-on-surface-variant text-[10px] tracking-widest uppercase font-bold group-focus-within:text-accent-pink transition-colors">Verify Encryption</label>
+<div class="relative pink-glow-box transition-all">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-sm group-focus-within:text-accent-pink transition-colors">enhanced_encryption</span>
+<input class="w-full bg-surface-container-highest border-transparent py-4 pl-12 pr-4 text-on-surface placeholder:text-on-surface-variant/30 focus:ring-0 focus:border-accent-pink transition-all" placeholder="Confirm Password" required="" type="password"/>
+</div>
+</div>
+<!-- Terms & Conditions -->
+<div class="flex items-start space-x-3 pt-2">
+<div class="flex items-center h-5">
+<input class="w-4 h-4 rounded-none bg-surface-container-highest border-outline-variant/30 text-accent-pink focus:ring-accent-pink/50" id="terms" required="" type="checkbox"/>
+</div>
+<label class="text-xs text-on-surface-variant leading-relaxed" for="terms">
+                                I accept the <a class="text-accent-pink hover:underline font-bold" href="#">Terms &amp; Conditions</a> and understand the operational protocols.
+                            </label>
+</div>
+<!-- Primary Button -->
+<button class="primary-pink-btn w-full py-4 font-headline font-bold text-background uppercase tracking-widest text-sm relative group overflow-hidden" type="submit">
+<span class="relative z-10">Create Account</span>
+</button>
+</form>
+<!-- Bottom Link -->
+<div class="mt-8 pt-8 border-t border-outline-variant/10 text-center">
+<p class="text-on-surface-variant text-sm">
+                            Already have an account? 
+                            <a class="text-accent-pink font-bold ml-1 hover:underline decoration-accent-pink underline-offset-4 pink-glow-text" href="#">Sign in</a>
+</p>
+</div>
+</div>
+<div class="mt-8 flex justify-center space-x-6 text-on-surface-variant/40">
+<span class="text-[10px] font-label uppercase tracking-widest">Protocol: V-2.4</span>
+<span class="text-[10px] font-label uppercase tracking-widest">Secure Node: 0x82A</span>
+</div>
+</div>
+</section>
+</main>
+<footer class="bg-[#10131c] w-full border-t border-[#3b494b]/15">
+<div class="flex flex-col md:flex-row justify-between items-center px-12 py-8 w-full">
+<div class="mb-4 md:mb-0">
+<span class="text-lg font-bold text-[#e0e2ee] font-headline tracking-tighter">Vincere Cryptex</span>
+<p class="text-[10px] font-label text-[#e0e2ee]/50 uppercase tracking-[0.2em] mt-1">Tactical Security Solutions</p>
+</div>
+<div class="flex space-x-8 text-sm">
+<a class="text-[#e0e2ee]/50 hover:text-[#FF4FD8] transition-colors font-label uppercase tracking-widest text-[10px]" href="#">Terms</a>
+<a class="text-[#e0e2ee]/50 hover:text-[#FF4FD8] transition-colors font-label uppercase tracking-widest text-[10px]" href="#">Privacy</a>
+<a class="text-[#e0e2ee]/50 hover:text-[#FF4FD8] transition-colors font-label uppercase tracking-widest text-[10px]" href="#">Documentation</a>
+</div>
+<div class="mt-4 md:mt-0">
+<p class="text-[#e0e2ee]/50 text-[10px] font-label uppercase tracking-widest">© 2024 Vincere Cryptex. All rights reserved.</p>
+</div>
+</div>
+</footer>
+</body></html>
