@@ -17,8 +17,8 @@ import {
   ShieldKeyIcon,
   ShieldLockIcon,
 } from "@/components/ui/icons";
+import { askAiTutor } from "@/lib/ai-tutor-client";
 import { isStudentUser } from "@/lib/auth-roles";
-import { buildBackendApiUrl } from "@/lib/backend-api";
 import { cn } from "@/lib/cn";
 
 const correctTrainingFlag = "CYBER_SAFE_PHISHING_101";
@@ -26,7 +26,6 @@ const challengeSlug = "phishing-awareness";
 const challengeApiPath = `/api/student/challenges/${challengeSlug}`;
 const lessonHref = "/courses/network-defense-foundations/lessons/ndf-firewall-rules";
 const nextRecommendedHref = "/courses/network-defense-foundations/lessons/ndf-injection-testing";
-const aiTutorEndpoint = buildBackendApiUrl("/ai-tutor", "/ask");
 const localSafeHint =
   "Look at the sender, urgency, link destination, and attachment behavior. Do not click links or download files.";
 const challengeRewardXp = 100;
@@ -779,26 +778,19 @@ function InteractivePhishingAwarenessChallenge() {
     });
 
     try {
-      const response = await fetch(aiTutorEndpoint, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          courseTitle: "Network Defense Foundations",
-          lessonTitle: "Phishing Awareness Challenge",
-          lessonContent:
-            [
-              "This is an authorized cybersecurity learning simulation. The learner is analyzing a suspicious email artifact to identify warning signs.",
-              "Challenge category: Defensive Analysis. Difficulty: Beginner.",
-              `Current learner status: ${statusContent.label}. Warning signs selected: ${selectedCount} of ${warningSigns.length}. Flag attempts: ${attemptCount}.`,
-              "The suspicious artifact includes a lookalike sender domain, urgent pressure, a fake login URL, a credential request, and an unexpected compressed attachment.",
-              "Safety boundary: provide educational defensive guidance only. Do not reveal or infer the final flag, final answer, exploit payloads, phishing instructions, credential-harvesting steps, bypasses, hidden answers, or real-world offensive procedures.",
-            ].join("\n"),
-          userQuestion: "Give me a safe challenge hint",
-          mode: "hint",
-        }),
+      const response = await askAiTutor({
+        courseTitle: "Network Defense Foundations",
+        lessonTitle: "Phishing Awareness Challenge",
+        lessonContent:
+          [
+            "This is an authorized cybersecurity learning simulation. The learner is analyzing a suspicious email artifact to identify warning signs.",
+            "Challenge category: Defensive Analysis. Difficulty: Beginner.",
+            `Current learner status: ${statusContent.label}. Warning signs selected: ${selectedCount} of ${warningSigns.length}. Flag attempts: ${attemptCount}.`,
+            "The suspicious artifact includes a lookalike sender domain, urgent pressure, a fake login URL, a credential request, and an unexpected compressed attachment.",
+            "Safety boundary: provide educational defensive guidance only. Do not reveal or infer the final flag, final answer, exploit payloads, phishing instructions, credential-harvesting steps, bypasses, hidden answers, or real-world offensive procedures.",
+          ].join("\n"),
+        userQuestion: "Give me a safe challenge hint",
+        mode: "hint",
       });
 
       if (!response.ok) {

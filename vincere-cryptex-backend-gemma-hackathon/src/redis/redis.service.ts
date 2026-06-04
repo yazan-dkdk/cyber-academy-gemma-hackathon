@@ -65,24 +65,45 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.del(key);
   }
 
-  async incrementRateLimit(key: string, windowSeconds: number) {
+  async incrementRateLimit(
+    key: string,
+    windowSeconds: number,
+    options?: { failClosed?: boolean },
+  ) {
     if (!(await this.connect())) {
+      if (options?.failClosed) {
+        throw new ServiceUnavailableException('Security controls unavailable');
+      }
+
       return {
         count: 1,
         ttlSeconds: windowSeconds,
       };
     }
 
-    const count = await this.client.incr(key);
-    if (count === 1) {
-      await this.client.expire(key, windowSeconds);
-    }
+    try {
+      const count = await this.client.incr(key);
+      if (count === 1) {
+        await this.client.expire(key, windowSeconds);
+      }
 
-    const ttlSeconds = await this.client.ttl(key);
-    return {
-      count,
-      ttlSeconds,
-    };
+      const ttlSeconds = await this.client.ttl(key);
+      return {
+        count,
+        ttlSeconds,
+      };
+    } catch {
+      this.logger.warn('Redis rate limit unavailable');
+
+      if (options?.failClosed) {
+        throw new ServiceUnavailableException('Security controls unavailable');
+      }
+
+      return {
+        count: 1,
+        ttlSeconds: windowSeconds,
+      };
+    }
   }
 
   private async assertConnected() {

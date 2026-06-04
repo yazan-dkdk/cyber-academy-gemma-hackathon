@@ -3,11 +3,10 @@
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRightIcon, ShieldLockIcon } from "@/components/ui/icons";
-import { buildBackendApiUrl } from "@/lib/backend-api";
+import { askAiTutor } from "@/lib/ai-tutor-client";
 import { cn } from "@/lib/cn";
 import type { LessonType } from "@/lib/courses/types";
 
-const AI_TUTOR_ENDPOINT = buildBackendApiUrl("/ai-tutor", "/ask");
 const MAX_LESSON_EXCERPT_LENGTH = 1600;
 const SAFE_TUTOR_FALLBACK_MESSAGE =
   "AI Tutor temporarily unavailable. Try again in a moment.";
@@ -609,20 +608,13 @@ export function AiTutorPanel({
     setIsLoading(true);
 
     try {
-      const response = await fetch(AI_TUTOR_ENDPOINT, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          question: trimmedQuestion,
-          lessonTitle,
-          lessonType,
-          courseTitle,
-          currentProgressPercent: safeProgressPercent,
-          lessonExcerpt: safeLessonExcerpt,
-        }),
+      const response = await askAiTutor({
+        question: trimmedQuestion,
+        lessonTitle,
+        lessonType,
+        courseTitle,
+        currentProgressPercent: safeProgressPercent,
+        lessonExcerpt: safeLessonExcerpt,
       });
 
       if (!response.ok) {

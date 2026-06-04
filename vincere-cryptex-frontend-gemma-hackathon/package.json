@@ -6,6 +6,7 @@
     "dev": "next dev --port 3001",
     "build": "next build",
     "start": "next start",
+    "demo:record": "node scripts/demo-recording-flow.mjs",
     "lint": "eslint"
   },
   "overrides": {
@@ -28,6 +29,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
+    "playwright": "^1.60.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

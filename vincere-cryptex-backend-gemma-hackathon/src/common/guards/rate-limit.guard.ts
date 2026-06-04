@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
@@ -16,6 +17,8 @@ import { AuthenticatedRequest } from '../interfaces/authenticated-request.interf
 
 @Injectable()
 export class RateLimitGuard implements CanActivate {
+  private readonly logger = new Logger(RateLimitGuard.name);
+
   constructor(
     @Inject(Reflector)
     private readonly reflector: Reflector,
@@ -37,9 +40,13 @@ export class RateLimitGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const { key, max, windowSeconds } = this.buildRateLimitContext(preset, request);
-    const { count, ttlSeconds } = await this.redisService.incrementRateLimit(key, windowSeconds);
+    const authSensitive = this.isAuthSensitivePreset(preset);
+    const { count, ttlSeconds } = await this.redisService.incrementRateLimit(key, windowSeconds, {
+      failClosed: authSensitive,
+    });
 
     if (count > max) {
+      this.logRateLimitTriggered(preset, request, ttlSeconds);
       throw new HttpException({
         message: 'Too many requests',
         retryAfterSeconds: ttlSeconds,
@@ -47,6 +54,46 @@ export class RateLimitGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  private logRateLimitTriggered(
+    preset: RateLimitPreset,
+    request: AuthenticatedRequest,
+    retryAfterSeconds: number,
+  ) {
+    this.logger.warn(
+      JSON.stringify({
+        event: 'auth.rate_limit.triggered',
+        timestamp: new Date().toISOString(),
+        outcome: 'blocked',
+        reason: 'rate_limit_exceeded',
+        action: preset,
+        route: request.url,
+        userId: request.auth?.user.id,
+        emailHash: this.getRequestEmailHash(request),
+        retryAfterSeconds,
+      }),
+    );
+  }
+
+  private getRequestEmailHash(request: AuthenticatedRequest) {
+    const email =
+      typeof request.body === 'object' && request.body && 'email' in request.body
+        ? String((request.body as Record<string, unknown>).email).trim().toLowerCase()
+        : '';
+
+    return email ? sha256Hex(email) : undefined;
+  }
+
+  private isAuthSensitivePreset(preset: RateLimitPreset) {
+    return (
+      preset === RateLimitPreset.LOGIN ||
+      preset === RateLimitPreset.REGISTER ||
+      preset === RateLimitPreset.RESEND_VERIFICATION ||
+      preset === RateLimitPreset.FORGOT_PASSWORD ||
+      preset === RateLimitPreset.RESET_PASSWORD ||
+      preset === RateLimitPreset.MFA_VERIFY
+    );
   }
 
   private buildRateLimitContext(preset: RateLimitPreset, request: AuthenticatedRequest) {

@@ -34,6 +34,10 @@ export class AppConfigService {
     return this.configService.get('FRONTEND_ORIGIN', { infer: true });
   }
 
+  get frontendUrl() {
+    return this.configService.get('FRONTEND_URL', { infer: true });
+  }
+
   get databaseUrl() {
     return this.configService.get('DATABASE_URL', { infer: true });
   }
@@ -48,6 +52,14 @@ export class AppConfigService {
 
   get sessionCookieName() {
     return this.configService.get('SESSION_COOKIE_NAME', { infer: true });
+  }
+
+  get cookieSecure() {
+    return this.configService.get('COOKIE_SECURE', { infer: true });
+  }
+
+  get cookieDomain() {
+    return this.configService.get('COOKIE_DOMAIN', { infer: true });
   }
 
   get sessionTtlSeconds() {
@@ -80,6 +92,38 @@ export class AppConfigService {
 
   get forgotPasswordMinDurationMs() {
     return this.configService.get('FORGOT_PASSWORD_MIN_DURATION_MS', { infer: true });
+  }
+
+  get emailProvider() {
+    return this.configService.get('EMAIL_PROVIDER', { infer: true });
+  }
+
+  get resendApiKey() {
+    return this.configService.get('RESEND_API_KEY', { infer: true });
+  }
+
+  get mailFrom() {
+    return this.configService.get('MAIL_FROM', { infer: true });
+  }
+
+  get appName() {
+    return this.configService.get('APP_NAME', { infer: true });
+  }
+
+  get mailHost() {
+    return this.configService.get('MAIL_HOST', { infer: true });
+  }
+
+  get mailPort() {
+    return this.configService.get('MAIL_PORT', { infer: true });
+  }
+
+  get mailUser() {
+    return this.configService.get('MAIL_USER', { infer: true });
+  }
+
+  get mailPass() {
+    return this.configService.get('MAIL_PASS', { infer: true });
   }
 
   get labOrchestratorBaseUrl() {

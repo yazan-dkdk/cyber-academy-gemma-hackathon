@@ -34,6 +34,11 @@ import {
 import { cn } from "@/lib/cn";
 import { isStudentUser } from "@/lib/auth-roles";
 import { getCourseRouteId } from "@/lib/courses/routing";
+import {
+  fetchStudentQuiz,
+  startStudentQuizAttempt,
+  submitStudentQuizAttempt,
+} from "@/lib/student-api-client";
 import type {
   Course,
   CourseLesson,
@@ -47,7 +52,8 @@ import {
 } from "@/lib/courses/structure";
 
 const TEXT_READING_SECONDS = 10;
-const VIDEO_WATCH_THRESHOLD = 82;
+const TEXT_SCROLL_THRESHOLD = 90;
+const VIDEO_WATCH_THRESHOLD = 85;
 const LESSON_PROGRESS_AUTOSAVE_DELAY_MS = 1200;
 const MEDIA_PROTECTION_LABEL = "Protected Media | Backend Session";
 
@@ -57,7 +63,7 @@ type LessonPagePanelProps = {
 };
 
 type CompletionRequirement = {
-  key: "READING_TIME" | "TEXT_SCROLL_BOTTOM" | "WATCH_THRESHOLD";
+  key: "READING_COMPLETE" | "VIDEO_PROGRESS_COMPLETE" | "QUIZ_PASSED";
   label: string;
   met: boolean;
   detail: string;
@@ -68,10 +74,202 @@ type MarkLessonComplete = (
   verification: LessonCompletionVerification,
 ) => Promise<MarkLessonCompleteResult>;
 
+type LessonQuizChoice = {
+  id: string;
+  choiceText: string;
+  position: number;
+};
+
+type LessonQuizQuestion = {
+  id: string;
+  type: "MCQ";
+  prompt: string;
+  position: number;
+  choices: LessonQuizChoice[];
+};
+
+type LessonQuiz = {
+  id: string;
+  title: string;
+  description: string | null;
+  passPercentage: number;
+  totalQuestions: number;
+  questions: LessonQuizQuestion[];
+};
+
+type LessonQuizResult = {
+  scorePercentage: number;
+  correctAnswers: number | null;
+  totalQuestions: number;
+  passed: boolean;
+};
+
 type LessonRuntimeState = "COMPLETED" | "CURRENT" | "LOCKED" | "AVAILABLE";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readRecordString(record: Record<string, unknown> | null, keys: string[]) {
+  if (!record) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function readRecordNumber(record: Record<string, unknown> | null, keys: string[]) {
+  if (!record) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) {
+      return Number(value);
+    }
+  }
+
+  return null;
+}
+
+function readRecordBoolean(record: Record<string, unknown> | null, keys: string[]) {
+  if (!record) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function normalizeQuizPayload(payload: unknown): LessonQuiz | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const quizRecord = isRecord(payload.quiz) ? payload.quiz : payload;
+  const quizId = readRecordString(quizRecord, ["id", "quizId"]);
+  const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
+
+  if (!quizId || rawQuestions.length === 0) {
+    return null;
+  }
+
+  const questions = rawQuestions
+    .map((question) => {
+      if (!isRecord(question)) {
+        return null;
+      }
+
+      const questionId = readRecordString(question, ["id", "questionId"]);
+      const prompt = readRecordString(question, ["prompt", "question", "text"]);
+      const rawChoices = Array.isArray(question.choices) ? question.choices : [];
+
+      if (!questionId || !prompt || rawChoices.length === 0) {
+        return null;
+      }
+
+      const choices = rawChoices
+        .map((choice) => {
+          if (!isRecord(choice)) {
+            return null;
+          }
+
+          const choiceId = readRecordString(choice, ["id", "choiceId"]);
+          const choiceText = readRecordString(choice, ["choiceText", "text", "label"]);
+
+          if (!choiceId || !choiceText) {
+            return null;
+          }
+
+          return {
+            id: choiceId,
+            choiceText,
+            position: Math.round(readRecordNumber(choice, ["position", "order"]) ?? 0),
+          };
+        })
+        .filter((choice): choice is LessonQuizChoice => Boolean(choice))
+        .sort((firstChoice, secondChoice) => firstChoice.position - secondChoice.position);
+
+      if (!choices.length) {
+        return null;
+      }
+
+      return {
+        id: questionId,
+        type: "MCQ" as const,
+        prompt,
+        position: Math.round(readRecordNumber(question, ["position", "order"]) ?? 0),
+        choices,
+      };
+    })
+    .filter((question): question is LessonQuizQuestion => Boolean(question))
+    .sort((firstQuestion, secondQuestion) => firstQuestion.position - secondQuestion.position);
+
+  if (!questions.length) {
+    return null;
+  }
+
+  return {
+    id: quizId,
+    title: readRecordString(quizRecord, ["title", "name"]) ?? "Lesson Quiz",
+    description: readRecordString(quizRecord, ["description", "summary"]),
+    passPercentage: Math.round(readRecordNumber(quizRecord, ["passPercentage"]) ?? 70),
+    totalQuestions: Math.round(readRecordNumber(quizRecord, ["totalQuestions"]) ?? questions.length),
+    questions,
+  };
+}
+
+function normalizeQuizAttemptId(payload: unknown) {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const attemptRecord = isRecord(payload.attempt) ? payload.attempt : payload;
+
+  return readRecordString(attemptRecord, ["id", "attemptId"]);
+}
+
+function normalizeQuizResultPayload(payload: unknown): LessonQuizResult | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const resultRecord = isRecord(payload.result) ? payload.result : payload;
+  const scorePercentage = readRecordNumber(resultRecord, ["scorePercentage", "score"]);
+  const totalQuestions = readRecordNumber(resultRecord, ["totalQuestions"]);
+  const passed = readRecordBoolean(resultRecord, ["passed"]);
+
+  if (scorePercentage === null || totalQuestions === null || passed === null) {
+    return null;
+  }
+
+  return {
+    scorePercentage: Math.round(scorePercentage),
+    correctAnswers: readRecordNumber(resultRecord, ["correctAnswers"]),
+    totalQuestions: Math.round(totalQuestions),
+    passed,
+  };
 }
 
 function normalizeLessonRouteValue(value: string | null | undefined) {
@@ -612,7 +810,238 @@ type UnlockedLessonPanelProps = {
   initialProgress: LessonProgressValues;
   markLessonComplete: MarkLessonComplete;
   updateLessonProgress: (lessonId: string, progress: Partial<LessonProgressValues>) => void;
+  onQuizPassed: () => Promise<unknown> | unknown;
 };
+
+type LessonQuizPanelProps = {
+  quizId: string | null;
+  onPassed: () => Promise<unknown> | unknown;
+};
+
+function LessonQuizPanel({ quizId, onPassed }: LessonQuizPanelProps) {
+  const [quiz, setQuiz] = useState<LessonQuiz | null>(null);
+  const [selectedChoices, setSelectedChoices] = useState<Record<string, string>>({});
+  const [result, setResult] = useState<LessonQuizResult | null>(null);
+  const [isLoading, setIsLoading] = useState(Boolean(quizId));
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!quizId) {
+      return;
+    }
+
+    let isMounted = true;
+
+    fetchStudentQuiz(quizId)
+      .then((payload) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const normalizedQuiz = normalizeQuizPayload(payload);
+
+        if (!normalizedQuiz) {
+          setMessage("Quiz payload was not usable.");
+          return;
+        }
+
+        setQuiz(normalizedQuiz);
+      })
+      .catch((error) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setMessage(error instanceof Error ? error.message : "Quiz could not be loaded.");
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [quizId]);
+
+  const answeredCount = quiz
+    ? quiz.questions.filter((question) => Boolean(selectedChoices[question.id])).length
+    : 0;
+  const allQuestionsAnswered = Boolean(quiz && answeredCount === quiz.questions.length);
+
+  const handleSubmitQuiz = useCallback(async () => {
+    if (!quiz || !quizId || !allQuestionsAnswered || result?.passed || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setMessage(null);
+    setResult(null);
+
+    try {
+      const attemptPayload = await startStudentQuizAttempt(quizId);
+      const attemptId = normalizeQuizAttemptId(attemptPayload);
+
+      if (!attemptId) {
+        throw new Error("Quiz attempt could not be started.");
+      }
+
+      const submissionPayload = await submitStudentQuizAttempt(
+        attemptId,
+        quiz.questions.map((question) => ({
+          questionId: question.id,
+          choiceId: selectedChoices[question.id]!,
+        })),
+      );
+      const normalizedResult = normalizeQuizResultPayload(submissionPayload);
+
+      if (!normalizedResult) {
+        throw new Error("Quiz result was not returned by the backend.");
+      }
+
+      setResult(normalizedResult);
+      setMessage(
+        normalizedResult.passed
+          ? "Quiz passed. Finish any remaining lesson requirements to complete the lesson."
+          : "Not passed. Review your selections and retake the quiz when ready.",
+      );
+
+      if (normalizedResult.passed) {
+        await onPassed();
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Quiz submission failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [
+    allQuestionsAnswered,
+    isSubmitting,
+    onPassed,
+    quiz,
+    quizId,
+    result,
+    selectedChoices,
+  ]);
+
+  if (!quizId) {
+    return null;
+  }
+
+  return (
+    <section className="lesson-quiz-panel lesson-console-content mt-6 px-6 py-7">
+      <div className="lesson-article-panel__header">
+        <div>
+          <p className="lesson-panel-kicker">Lesson Quiz</p>
+          <h2 className="font-display text-2xl font-semibold text-white">
+            {quiz?.title ?? "Checkpoint"}
+          </h2>
+          {quiz?.description ? (
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-foreground/62">
+              {quiz.description}
+            </p>
+          ) : null}
+        </div>
+        <span className="lesson-scroll-readout">
+          Pass {quiz?.passPercentage ?? 70}%
+        </span>
+      </div>
+
+      {isLoading ? (
+        <p className="mt-6 text-sm leading-6 text-foreground/62">Loading quiz...</p>
+      ) : quiz ? (
+        <div className="mt-6 space-y-6">
+          {quiz.questions.map((question, questionIndex) => (
+            <fieldset
+              key={question.id}
+              disabled={Boolean(result?.passed) || isSubmitting}
+              className="space-y-3 rounded border border-white/10 bg-black/16 p-4"
+            >
+              <legend className="px-1 text-sm font-semibold leading-6 text-white">
+                {questionIndex + 1}. {question.prompt}
+              </legend>
+              <div className="grid gap-2">
+                {question.choices.map((choice) => {
+                  const inputId = `${question.id}-${choice.id}`;
+                  const selected = selectedChoices[question.id] === choice.id;
+
+                  return (
+                    <label
+                      key={choice.id}
+                      htmlFor={inputId}
+                      className={cn(
+                        "flex cursor-pointer items-start gap-3 rounded border px-3 py-3 text-sm leading-6 transition",
+                        selected
+                          ? "border-primary/60 bg-primary/12 text-white"
+                          : "border-white/10 bg-white/[0.03] text-foreground/68 hover:border-primary/35 hover:text-foreground",
+                        result?.passed ? "cursor-default" : "",
+                      )}
+                    >
+                      <input
+                        id={inputId}
+                        type="radio"
+                        name={question.id}
+                        checked={selected}
+                        disabled={Boolean(result?.passed) || isSubmitting}
+                        onChange={() =>
+                          setSelectedChoices((currentChoices) => ({
+                            ...currentChoices,
+                            [question.id]: choice.id,
+                          }))
+                        }
+                        className="mt-1 h-4 w-4 accent-cyan-300"
+                      />
+                      <span>{choice.choiceText}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ))}
+
+          <div className="flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm leading-6 text-foreground/62">
+              {result
+                ? `${result.scorePercentage}% score`
+                : `${answeredCount}/${quiz.totalQuestions} answered`}
+            </p>
+            <PrimaryButton
+              type="button"
+              tone={result?.passed ? "cyan" : "pink"}
+              loading={isSubmitting}
+              disabled={!allQuestionsAnswered || Boolean(result?.passed)}
+              onClick={() => void handleSubmitQuiz()}
+            >
+              {result ? (result.passed ? "Quiz Passed" : "Retake Quiz") : "Submit Quiz"}
+            </PrimaryButton>
+          </div>
+
+          {result ? (
+            <div
+              className={cn(
+                "rounded border px-4 py-3 text-sm leading-6",
+                result.passed
+                  ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100"
+                  : "border-rose-300/35 bg-rose-300/10 text-rose-100",
+              )}
+            >
+              {result.passed ? "Pass" : "Fail"} - {result.scorePercentage}%{" "}
+              {result.correctAnswers !== null
+                ? `(${result.correctAnswers}/${result.totalQuestions})`
+                : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {message ? (
+        <p className="mt-5 text-sm leading-6 text-foreground/68">{message}</p>
+      ) : null}
+    </section>
+  );
+}
 
 function UnlockedLessonPanel({
   courseTitle,
@@ -626,20 +1055,22 @@ function UnlockedLessonPanel({
   initialProgress,
   markLessonComplete,
   updateLessonProgress,
+  onQuizPassed,
 }: UnlockedLessonPanelProps) {
   const articleRef = useRef<HTMLElement>(null);
   const { ref: consoleRef, tiltHandlers } = useCardTilt<HTMLElement>({
-    maxRotateX: 10,
-    maxRotateY: 12,
-    parallax: 36,
+    maxRotateX: 0,
+    maxRotateY: 0,
+    parallax: 18,
   });
   const [readingSeconds, setReadingSeconds] = useState(() => initialProgress.readingTime);
   const [scrollProgressPercent, setScrollProgressPercent] = useState(() => initialProgress.scroll);
-  const [textScrolledToBottom, setTextScrolledToBottom] = useState(() => initialProgress.scroll >= 98);
+  const [textScrolledToBottom, setTextScrolledToBottom] = useState(() => initialProgress.scroll >= TEXT_SCROLL_THRESHOLD);
   const [videoProgressPercent, setVideoProgressPercent] = useState(() => initialProgress.watch);
   const [isWatchingVideo, setIsWatchingVideo] = useState(false);
   const [isVerifyingCompletion, setIsVerifyingCompletion] = useState(false);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
+  const [quizPassOverrideLessonId, setQuizPassOverrideLessonId] = useState<string | null>(null);
   const lastAutoSavedProgressRef = useRef<LessonProgressValues>(
     normalizeMeasuredProgress(initialProgress),
   );
@@ -655,6 +1086,12 @@ function UnlockedLessonPanel({
   const hasText = displayArticleContent.length > 0;
   const requiresText = lessonMode === "TEXT" || lessonMode === "HYBRID";
   const requiresVideo = lessonMode === "VIDEO" || lessonMode === "HYBRID";
+  const quizRequired = Boolean(lesson.hasQuiz || lesson.quizId);
+  const quizPassed =
+    isComplete ||
+    lesson.quizPassed === true ||
+    !quizRequired ||
+    quizPassOverrideLessonId === lesson.id;
   const getMeasuredProgress = useCallback(
     () =>
       normalizeMeasuredProgress({
@@ -674,35 +1111,39 @@ function UnlockedLessonPanel({
     ? Math.min(100, Math.round((readingSeconds / TEXT_READING_SECONDS) * 100))
     : 100;
   const readingTimeSatisfied = !requiresText || readingSeconds >= TEXT_READING_SECONDS;
+  const readingComplete = !requiresText || (readingTimeSatisfied && textScrolledToBottom);
   const watchThresholdSatisfied =
     !requiresVideo || videoProgressPercent >= VIDEO_WATCH_THRESHOLD;
   const completionRequirements: CompletionRequirement[] = [
     requiresText
       ? {
-          key: "READING_TIME",
-          label: "Reading time",
-          met: readingTimeSatisfied,
-          detail: readingTimeSatisfied
+          key: "READING_COMPLETE",
+          label: "Reading complete",
+          met: readingComplete,
+          detail: readingComplete
             ? "Recorded"
-            : `${Math.max(TEXT_READING_SECONDS - readingSeconds, 0)}s remaining`,
-        }
-      : null,
-    requiresText
-      ? {
-          key: "TEXT_SCROLL_BOTTOM",
-          label: "Scroll bottom",
-          met: textScrolledToBottom,
-          detail: textScrolledToBottom ? "Reached" : `${scrollProgressPercent}% scanned`,
+            : [
+                readingTimeSatisfied ? null : `${Math.max(TEXT_READING_SECONDS - readingSeconds, 0)}s reading`,
+                textScrolledToBottom ? null : `${Math.max(TEXT_SCROLL_THRESHOLD - scrollProgressPercent, 0)}% scroll`,
+              ].filter(Boolean).join(" + "),
         }
       : null,
     requiresVideo
       ? {
-          key: "WATCH_THRESHOLD",
-          label: "Watch threshold",
+          key: "VIDEO_PROGRESS_COMPLETE",
+          label: "Video progress complete",
           met: watchThresholdSatisfied,
           detail: watchThresholdSatisfied
             ? "Recorded"
             : `${Math.max(VIDEO_WATCH_THRESHOLD - videoProgressPercent, 0)}% remaining`,
+        }
+      : null,
+    quizRequired
+      ? {
+          key: "QUIZ_PASSED",
+          label: "Quiz passed",
+          met: quizPassed,
+          detail: quizPassed ? "Passed" : "Pending",
         }
       : null,
   ].filter((requirement): requirement is CompletionRequirement => Boolean(requirement));
@@ -744,7 +1185,7 @@ function UnlockedLessonPanel({
       return persistedProgress;
     });
 
-    if (nextProgress >= 98) {
+    if (nextProgress >= TEXT_SCROLL_THRESHOLD) {
       setTextScrolledToBottom(true);
     }
   }, []);
@@ -752,6 +1193,11 @@ function UnlockedLessonPanel({
   const startVideoSimulation = useCallback(() => {
     setIsWatchingVideo(true);
   }, []);
+
+  const handleQuizPassed = useCallback(async () => {
+    setQuizPassOverrideLessonId(lesson.id);
+    await onQuizPassed();
+  }, [lesson.id, onQuizPassed]);
 
   const handleCompleteLesson = useCallback(async () => {
     if (!canMarkComplete) {
@@ -903,7 +1349,7 @@ function UnlockedLessonPanel({
           <article
             ref={articleRef}
             onScroll={handleTextScroll}
-            className="lesson-article-panel lesson-console-content max-h-[31rem] overflow-y-auto px-6 py-7"
+            className="lesson-article-panel lesson-console-content px-6 py-7"
           >
             <div className="lesson-article-panel__header">
               <div>
@@ -914,7 +1360,7 @@ function UnlockedLessonPanel({
               </div>
               <span className="lesson-scroll-readout">{scrollProgressPercent}% scanned</span>
             </div>
-            <div className="mt-6 max-w-3xl space-y-5 text-base leading-8 text-foreground/72">
+            <div className="lesson-article-panel__body mt-6">
               {displayArticleContent.length ? displayArticleContent.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               )) : (
@@ -924,6 +1370,14 @@ function UnlockedLessonPanel({
               )}
             </div>
           </article>
+        ) : null}
+
+        {lesson.hasQuiz || lesson.quizId ? (
+          <LessonQuizPanel
+            key={lesson.quizId ?? "missing-quiz"}
+            quizId={lesson.quizId ?? null}
+            onPassed={handleQuizPassed}
+          />
         ) : null}
       </section>
 
@@ -1282,11 +1736,12 @@ function StudentLessonPagePanel({ course, lessonId }: LessonPagePanelProps) {
   }, [activeCourseRouteId, lesson, lessonId, lessonRouteInputs, lockedLessonSet, orderedLessons]);
   const nextRouteHref = isComplete ? nextLessonResolution.href ?? nextAvailableHref ?? nextHref : nextHref;
   const nextRouteIsLocked =
-    isComplete && nextLessonResolution.href
+    !isComplete ||
+    (nextLessonResolution.href
       ? nextLessonResolution.isLocked
       : nextRouteHref === nextHref
         ? isNextLocked
-        : false;
+        : false);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") {
@@ -1528,6 +1983,7 @@ function StudentLessonPagePanel({ course, lessonId }: LessonPagePanelProps) {
             }}
             markLessonComplete={markLessonComplete}
             updateLessonProgress={updateLessonProgress}
+            onQuizPassed={refreshStudentLesson}
           />
         </main>
       </section>

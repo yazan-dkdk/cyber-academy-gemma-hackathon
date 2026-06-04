@@ -26,6 +26,24 @@ const parseBoolean = (value: unknown, fallback = false): boolean => {
   throw new Error(`Expected a boolean value but received "${String(value)}"`);
 };
 
+const parseNodeEnv = (value: unknown): EnvironmentVariables['NODE_ENV'] => {
+  const nodeEnv = String(value ?? 'development');
+  if (nodeEnv !== 'development' && nodeEnv !== 'test' && nodeEnv !== 'production') {
+    throw new Error('NODE_ENV must be one of development, test, or production');
+  }
+
+  return nodeEnv;
+};
+
+const parseEmailProvider = (value: unknown): EnvironmentVariables['EMAIL_PROVIDER'] => {
+  const provider = String(value ?? 'smtp').trim().toLowerCase();
+  if (provider !== 'smtp' && provider !== 'resend') {
+    throw new Error('EMAIL_PROVIDER must be either "smtp" or "resend"');
+  }
+
+  return provider;
+};
+
 const parseInteger = (value: unknown, fieldName: string, fallback?: number): number => {
   if ((value === undefined || value === null || value === '') && fallback !== undefined) {
     return fallback;
@@ -39,16 +57,58 @@ const parseInteger = (value: unknown, fieldName: string, fallback?: number): num
   return parsed;
 };
 
+const parseOptionalInteger = (value: unknown, fieldName: string): number | null => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  return parseInteger(value, fieldName);
+};
+
+const trimOptional = (value: unknown): string => {
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const normalizeUrl = (value: string) => value.replace(/\/+$/, '');
+
+const assertUrl = (value: string, fieldName: string) => {
+  try {
+    // eslint-disable-next-line no-new
+    new URL(value);
+  } catch {
+    throw new Error(`${fieldName} must be a valid URL`);
+  }
+};
+
+const assertPostgresUrl = (value: string, fieldName: string) => {
+  assertUrl(value, fieldName);
+  const parsed = new URL(value);
+  if (parsed.protocol !== 'postgresql:' && parsed.protocol !== 'postgres:') {
+    throw new Error(`${fieldName} must use the postgresql:// or postgres:// protocol`);
+  }
+};
+
+const assertRedisUrl = (value: string, fieldName: string) => {
+  assertUrl(value, fieldName);
+  const parsed = new URL(value);
+  if (parsed.protocol !== 'redis:' && parsed.protocol !== 'rediss:') {
+    throw new Error(`${fieldName} must use the redis:// or rediss:// protocol`);
+  }
+};
+
 export interface EnvironmentVariables {
   NODE_ENV: 'development' | 'test' | 'production';
   PORT: number;
   TRUST_PROXY: boolean;
   APP_BASE_URL: string;
   FRONTEND_ORIGIN: string;
+  FRONTEND_URL: string;
   DATABASE_URL: string;
   REDIS_URL: string;
   SESSION_SECRET: string;
   SESSION_COOKIE_NAME: string;
+  COOKIE_SECURE: boolean;
+  COOKIE_DOMAIN: string | null;
   SESSION_TTL_SECONDS: number;
   SESSION_IDLE_TTL_SECONDS: number;
   AUTH_STATE_CACHE_TTL_SECONDS: number;
@@ -75,6 +135,14 @@ export interface EnvironmentVariables {
   LAB_RESET_RATE_LIMIT_WINDOW_SECONDS: number;
   LAB_TERMINATE_RATE_LIMIT_MAX: number;
   LAB_TERMINATE_RATE_LIMIT_WINDOW_SECONDS: number;
+  EMAIL_PROVIDER: 'smtp' | 'resend';
+  RESEND_API_KEY: string;
+  MAIL_FROM: string;
+  APP_NAME: string;
+  MAIL_HOST: string;
+  MAIL_PORT: number | null;
+  MAIL_USER: string;
+  MAIL_PASS: string;
   MFA_ATTEMPT_MAX_FAILURES: number;
   MFA_ATTEMPT_WINDOW_SECONDS: number;
   MFA_ATTEMPT_LOCK_SECONDS: number;
@@ -116,18 +184,75 @@ export const validateEnvironment = (
     throw new Error('AUTH_STATE_CACHE_TTL_SECONDS must be between 1 and 120');
   }
 
+  const nodeEnv = parseNodeEnv(config.NODE_ENV);
+  const isProduction = nodeEnv === 'production';
+  const appBaseUrl = normalizeUrl(String(config.APP_BASE_URL));
+  const frontendOrigin = normalizeUrl(String(config.FRONTEND_ORIGIN ?? config.APP_BASE_URL));
+  const frontendUrl = normalizeUrl(String(config.FRONTEND_URL ?? frontendOrigin));
+  const databaseUrl = String(config.DATABASE_URL);
+  const redisUrl = String(config.REDIS_URL);
+  const sessionSecret = String(config.SESSION_SECRET);
+  const emailProvider = parseEmailProvider(config.EMAIL_PROVIDER);
+  const resendApiKey = trimOptional(config.RESEND_API_KEY);
+  const explicitMailFrom = trimOptional(config.MAIL_FROM);
+  const mailHost = trimOptional(config.MAIL_HOST);
+  const mailPort = parseOptionalInteger(config.MAIL_PORT, 'MAIL_PORT');
+  const mailUser = trimOptional(config.MAIL_USER);
+  const mailPass = String(config.MAIL_PASS ?? '');
+
+  assertUrl(appBaseUrl, 'APP_BASE_URL');
+  assertUrl(frontendOrigin, 'FRONTEND_ORIGIN');
+  assertUrl(frontendUrl, 'FRONTEND_URL');
+
+  if (isProduction) {
+    if (!config.FRONTEND_URL) {
+      throw new Error('FRONTEND_URL is required in production');
+    }
+
+    if (!config.FRONTEND_ORIGIN) {
+      throw new Error('FRONTEND_ORIGIN is required in production');
+    }
+
+    assertPostgresUrl(databaseUrl, 'DATABASE_URL');
+    assertRedisUrl(redisUrl, 'REDIS_URL');
+
+    if (sessionSecret.length < 32) {
+      throw new Error('SESSION_SECRET must be at least 32 characters in production');
+    }
+
+    if (!explicitMailFrom) {
+      throw new Error('MAIL_FROM is required in production');
+    }
+
+    if (emailProvider === 'resend' && !resendApiKey) {
+      throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend');
+    }
+
+    if (
+      emailProvider === 'smtp' &&
+      (!mailHost || !mailPort || mailPort <= 0 || !mailUser || !mailPass)
+    ) {
+      throw new Error(
+        'MAIL_HOST, MAIL_PORT, MAIL_USER, and MAIL_PASS are required when EMAIL_PROVIDER=smtp in production',
+      );
+    }
+  }
+
   const gemmaProvider = String(config.GEMMA_PROVIDER ?? 'mock') || 'mock';
 
   return {
-    NODE_ENV: (config.NODE_ENV as EnvironmentVariables['NODE_ENV']) ?? 'development',
+    NODE_ENV: nodeEnv,
     PORT: parseInteger(config.PORT, 'PORT', 3000),
     TRUST_PROXY: parseBoolean(config.TRUST_PROXY, false),
-    APP_BASE_URL: String(config.APP_BASE_URL),
-    FRONTEND_ORIGIN: String(config.FRONTEND_ORIGIN ?? config.APP_BASE_URL),
-    DATABASE_URL: String(config.DATABASE_URL),
-    REDIS_URL: String(config.REDIS_URL),
-    SESSION_SECRET: String(config.SESSION_SECRET),
+    APP_BASE_URL: appBaseUrl,
+    FRONTEND_ORIGIN: frontendOrigin,
+    FRONTEND_URL: frontendUrl,
+    DATABASE_URL: databaseUrl,
+    REDIS_URL: redisUrl,
+    SESSION_SECRET: sessionSecret,
     SESSION_COOKIE_NAME: String(config.SESSION_COOKIE_NAME),
+    COOKIE_SECURE: parseBoolean(config.COOKIE_SECURE, isProduction),
+    COOKIE_DOMAIN: trimOptional(config.COOKIE_DOMAIN) || null,
     SESSION_TTL_SECONDS: parseInteger(config.SESSION_TTL_SECONDS, 'SESSION_TTL_SECONDS', 604800),
     SESSION_IDLE_TTL_SECONDS: parseInteger(
       config.SESSION_IDLE_TTL_SECONDS,
@@ -238,6 +363,14 @@ export const validateEnvironment = (
       'LAB_TERMINATE_RATE_LIMIT_WINDOW_SECONDS',
       300,
     ),
+    EMAIL_PROVIDER: emailProvider,
+    RESEND_API_KEY: resendApiKey,
+    MAIL_FROM: explicitMailFrom || 'no-reply@example.com',
+    APP_NAME: trimOptional(config.APP_NAME) || 'Cyber Academy Web',
+    MAIL_HOST: mailHost,
+    MAIL_PORT: mailPort,
+    MAIL_USER: mailUser,
+    MAIL_PASS: mailPass,
     MFA_ATTEMPT_MAX_FAILURES: parseInteger(
       config.MFA_ATTEMPT_MAX_FAILURES,
       'MFA_ATTEMPT_MAX_FAILURES',

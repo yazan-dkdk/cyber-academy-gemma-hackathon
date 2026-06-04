@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -13,7 +13,10 @@ import { QuizzesService } from './quizzes.service';
 @UseGuards(AuthenticatedGuard, RolesGuard)
 @Roles(UserRole.STUDENT)
 export class QuizzesController {
-  constructor(private readonly quizzesService: QuizzesService) {}
+  constructor(
+    @Inject(QuizzesService)
+    private readonly quizzesService: QuizzesService,
+  ) {}
 
   @Get('quizzes/:quizId')
   async getQuizForStudent(

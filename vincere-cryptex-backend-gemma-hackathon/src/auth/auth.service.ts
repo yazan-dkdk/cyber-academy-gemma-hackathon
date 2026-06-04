@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -43,7 +44,7 @@ const GENERIC_FORGOT_PASSWORD_RESPONSE = {
 
 const GENERIC_LOGIN_ERROR_MESSAGE = 'Invalid email or password';
 const PASSWORD_HASH_ROUNDS = 12;
-const DUMMY_BCRYPT_HASH = '$2a$10$7EqJtq98hPqEX7fNZaFWoOHi1s7C6KDAdM8X1sC3yRlmE4s46HoP.';
+const DUMMY_BCRYPT_HASH = '$2a$12$G0X8KswPwc6lasxLPJlVDuwvKRatbrYKZ3WNvgi2pwVaWjnirH66W';
 
 interface LockedOneTimeTokenRow {
   id: string;
@@ -61,6 +62,7 @@ interface DevelopmentEmailVerificationToken {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly developmentEmailVerificationTokens = new Map<
     string,
     DevelopmentEmailVerificationToken
@@ -85,46 +87,54 @@ export class AuthService {
 
   async register(email: string, password: string) {
     const normalizedEmail = normalizeEmail(email);
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
-      select: {
-        id: true,
-        role: true,
-        status: true,
-        deletedAt: true,
-      },
-    });
+    return waitForMinimumDuration(async () => {
+      this.logAuthSecurityEvent('auth.register.requested', {
+        outcome: 'generic_response',
+        action: 'register',
+        emailHash: this.hashLogValue(normalizedEmail),
+      });
 
-    if (!existingUser) {
-      const passwordHash = await bcrypt.hash(password, PASSWORD_HASH_ROUNDS);
-      const user = await this.prisma.user.create({
-        data: {
-          email: normalizedEmail,
-          passwordHash,
-          role: UserRole.STUDENT,
-          status: UserStatus.PENDING_EMAIL_VERIFICATION,
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: {
+          id: true,
+          role: true,
+          status: true,
+          deletedAt: true,
         },
       });
 
-      await this.createEmailVerificationToken(user.id, user.email);
+      if (!existingUser) {
+        const passwordHash = await bcrypt.hash(password, PASSWORD_HASH_ROUNDS);
+        const user = await this.prisma.user.create({
+          data: {
+            email: normalizedEmail,
+            passwordHash,
+            role: UserRole.STUDENT,
+            status: UserStatus.PENDING_EMAIL_VERIFICATION,
+          },
+        });
+
+        await this.createEmailVerificationToken(user.id, user.email);
+        return GENERIC_REGISTER_RESPONSE;
+      }
+
+      if (existingUser.deletedAt) {
+        // Soft-deleted emails remain intentionally reserved. We keep the generic
+        // registration response here so the client never learns whether the email
+        // is already blocked by an active account or a soft-deleted one.
+        return GENERIC_REGISTER_RESPONSE;
+      }
+
+      if (
+        existingUser.role === UserRole.STUDENT &&
+        existingUser.status === UserStatus.PENDING_EMAIL_VERIFICATION
+      ) {
+        await this.createEmailVerificationToken(existingUser.id, normalizedEmail);
+      }
+
       return GENERIC_REGISTER_RESPONSE;
-    }
-
-    if (existingUser.deletedAt) {
-      // Soft-deleted emails remain intentionally reserved. We keep the generic
-      // registration response here so the client never learns whether the email
-      // is already blocked by an active account or a soft-deleted one.
-      return GENERIC_REGISTER_RESPONSE;
-    }
-
-    if (
-      existingUser.role === UserRole.STUDENT &&
-      existingUser.status === UserStatus.PENDING_EMAIL_VERIFICATION
-    ) {
-      await this.createEmailVerificationToken(existingUser.id, normalizedEmail);
-    }
-
-    return GENERIC_REGISTER_RESPONSE;
+    }, this.configService.forgotPasswordMinDurationMs);
   }
 
   async verifyEmail(token: string) {
@@ -225,8 +235,14 @@ export class AuthService {
   }
 
   async resendVerification(email: string) {
+    const normalizedEmail = normalizeEmail(email);
+    this.logAuthSecurityEvent('auth.resend_verification.requested', {
+      outcome: 'generic_response',
+      action: 'resend-verification',
+      emailHash: this.hashLogValue(normalizedEmail),
+    });
+
     await waitForMinimumDuration(async () => {
-      const normalizedEmail = normalizeEmail(email);
       const user = await this.prisma.user.findFirst({
         where: {
           email: normalizedEmail,
@@ -300,53 +316,93 @@ export class AuthService {
 
   async login(email: string, password: string, request: AuthenticatedRequest) {
     const normalizedEmail = normalizeEmail(email);
-    const user = await this.prisma.user.findFirst({
-      where: {
-        email: normalizedEmail,
-        deletedAt: null,
-      },
-      include: {
-        adminMfaConfig: true,
-      },
-    });
+    const loginResult = await waitForMinimumDuration(async () => {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          email: normalizedEmail,
+          deletedAt: null,
+        },
+        include: {
+          adminMfaConfig: true,
+        },
+      });
 
-    const passwordHash = user?.passwordHash ?? DUMMY_BCRYPT_HASH;
-    const passwordValid = await bcrypt.compare(password, passwordHash);
+      const passwordHash = user?.passwordHash ?? DUMMY_BCRYPT_HASH;
+      const passwordValid = await bcrypt.compare(password, passwordHash);
 
-    // Sign-in is intentionally generic so the endpoint does not reveal whether
-    // the email exists, the password was wrong, or the account is not eligible
-    // to authenticate yet. Only ACTIVE accounts are allowed to start sessions.
-    if (!user || !passwordValid || user.status !== UserStatus.ACTIVE || !user.emailVerifiedAt) {
+      if (!user || !passwordValid) {
+        this.logAuthSecurityEvent('auth.login.failed', {
+          outcome: 'failed',
+          reason: 'invalid_credentials',
+          action: 'login',
+          emailHash: this.hashLogValue(normalizedEmail),
+        });
+        return {
+          success: false as const,
+        };
+      }
+
+      // Sign-in is intentionally generic so the endpoint does not reveal whether
+      // the account is not eligible to authenticate yet. Only ACTIVE accounts are
+      // allowed to start sessions.
+      if (user.status !== UserStatus.ACTIVE || !user.emailVerifiedAt) {
+        this.logAuthSecurityEvent('auth.login.blocked_status', {
+          outcome: 'blocked',
+          reason: 'account_not_active_or_unverified',
+          action: 'login',
+          userId: user.id,
+          status: user.status,
+        });
+        return {
+          success: false as const,
+        };
+      }
+
+      const isAdmin = user.role === UserRole.ADMIN;
+      const userAuthState = this.authStateService.buildUserAuthState(user);
+      const session = await this.sessionService.createSession({
+        user: userAuthState,
+        request,
+        authLevel: isAdmin ? 'PASSWORD' : 'MFA',
+        adminMfaVerifiedAt: isAdmin ? null : new Date().toISOString(),
+      });
+      await this.authStateService.cacheUserAuthState(userAuthState);
+
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          lastLoginAt: new Date(),
+        },
+      });
+
+      this.logAuthSecurityEvent('auth.login.success', {
+        outcome: 'success',
+        action: 'login',
+        userId: user.id,
+        role: user.role,
+      });
+
+      return {
+        success: true as const,
+        session,
+        response: {
+          user: this.serializeUser(user),
+          ...this.serializeSessionState({
+            role: user.role,
+            adminMfaEnabled: userAuthState.adminMfaEnabled,
+            authLevel: session.authLevel,
+          }),
+        },
+      };
+    }, this.configService.forgotPasswordMinDurationMs);
+
+    if (!loginResult.success) {
       throw new UnauthorizedException(GENERIC_LOGIN_ERROR_MESSAGE);
     }
 
-    const isAdmin = user.role === UserRole.ADMIN;
-    const userAuthState = this.authStateService.buildUserAuthState(user);
-    const session = await this.sessionService.createSession({
-      user: userAuthState,
-      request,
-      authLevel: isAdmin ? 'PASSWORD' : 'MFA',
-      adminMfaVerifiedAt: isAdmin ? null : new Date().toISOString(),
-    });
-    await this.authStateService.cacheUserAuthState(userAuthState);
-
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        lastLoginAt: new Date(),
-      },
-    });
-
     return {
-      session,
-      response: {
-        user: this.serializeUser(user),
-        ...this.serializeSessionState({
-          role: user.role,
-          adminMfaEnabled: userAuthState.adminMfaEnabled,
-          authLevel: session.authLevel,
-        }),
-      },
+      session: loginResult.session,
+      response: loginResult.response,
     };
   }
 
@@ -354,6 +410,12 @@ export class AuthService {
     if (sessionId) {
       await this.sessionService.destroySession(sessionId);
     }
+
+    this.logAuthSecurityEvent('auth.logout.completed', {
+      outcome: 'success',
+      action: 'logout',
+      hadSession: Boolean(sessionId),
+    });
 
     return {
       message: 'Logged out successfully',
@@ -386,8 +448,14 @@ export class AuthService {
   }
 
   async createPasswordReset(email: string) {
+    const normalizedEmail = normalizeEmail(email);
+    this.logAuthSecurityEvent('auth.forgot_password.requested', {
+      outcome: 'generic_response',
+      action: 'forgot-password',
+      emailHash: this.hashLogValue(normalizedEmail),
+    });
+
     await waitForMinimumDuration(async () => {
-      const normalizedEmail = normalizeEmail(email);
       const user = await this.prisma.user.findFirst({
         where: {
           email: normalizedEmail,
@@ -395,6 +463,7 @@ export class AuthService {
         },
         select: {
           id: true,
+          email: true,
           status: true,
         },
       });
@@ -405,6 +474,9 @@ export class AuthService {
 
       const rawToken = this.generateToken();
       const issuedAt = new Date();
+      const expiresAt = new Date(
+        issuedAt.getTime() + this.configService.passwordResetTokenTtlMinutes * 60 * 1000,
+      );
       await this.prisma.$transaction(async (tx) => {
         // Password reset links are one-time credentials. Reissuing a link first
         // retires any older unused reset tokens so only the latest flow remains valid.
@@ -422,11 +494,15 @@ export class AuthService {
           data: {
             userId: user.id,
             tokenHash: sha256Hex(rawToken),
-            expiresAt: new Date(
-              issuedAt.getTime() + this.configService.passwordResetTokenTtlMinutes * 60 * 1000,
-            ),
+            expiresAt,
           },
         });
+      });
+
+      void this.emailService.sendPasswordResetEmail({
+        to: user.email,
+        token: rawToken,
+        expiresAt,
       });
     }, this.configService.forgotPasswordMinDurationMs);
 
@@ -455,6 +531,11 @@ export class AuthService {
 
       const lockedToken = lockedRows[0];
       if (!lockedToken) {
+        this.logAuthSecurityEvent('auth.password_reset.failed', {
+          outcome: 'failed',
+          reason: 'invalid_or_expired_token',
+          action: 'reset-password',
+        });
         throw new BadRequestException('Invalid or expired reset token');
       }
 
@@ -479,6 +560,11 @@ export class AuthService {
       });
 
       if (claimedToken.count !== 1) {
+        this.logAuthSecurityEvent('auth.password_reset.failed', {
+          outcome: 'failed',
+          reason: 'token_claim_failed',
+          action: 'reset-password',
+        });
         throw new BadRequestException('Invalid or expired reset token');
       }
 
@@ -793,6 +879,23 @@ export class AuthService {
       mfaConfigured: input.adminMfaEnabled,
       mfaVerified: input.authLevel === 'MFA',
     };
+  }
+
+  private logAuthSecurityEvent(
+    event: string,
+    metadata: Record<string, unknown>,
+  ) {
+    this.logger.log(
+      JSON.stringify({
+        event,
+        timestamp: new Date().toISOString(),
+        ...metadata,
+      }),
+    );
+  }
+
+  private hashLogValue(value: string) {
+    return sha256Hex(value);
   }
 
 }

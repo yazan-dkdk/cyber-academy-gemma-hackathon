@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -15,6 +14,7 @@ import {
   LabStatus,
   LessonStatus,
   Prisma,
+  QuizAttemptStatus,
   QuizStatus,
   QuizTargetType,
 } from '@prisma/client';
@@ -502,6 +502,11 @@ export class CoursesService {
         )
         .map((progress) => progress.lessonId),
     );
+    const unlockedLessonIds = this.resolveUnlockedLessonIds(
+      publishedLessons,
+      completedLessonIds,
+      state.isEnrolled,
+    );
 
     return {
       course: {
@@ -535,8 +540,8 @@ export class CoursesService {
             ...this.serializeLessonModeFields(lesson),
             order: lesson.position,
             position: lesson.position,
-            locked: !state.isEnrolled,
-            unlocked: state.isEnrolled,
+            locked: !unlockedLessonIds.has(lesson.id),
+            unlocked: unlockedLessonIds.has(lesson.id),
             completed: completedLessonIds.has(lesson.id),
             publishedAt: lesson.publishedAt,
             ...this.serializeQuizPresence(lesson.quiz),
@@ -721,6 +726,7 @@ export class CoursesService {
     const course = await this.getPublishedCourseIdentity(courseId);
     const lesson = await this.getPublishedLesson(course.id, course.slug, lessonId);
     const enrollment = await this.requireEnrollment(userId, course.id);
+    await this.requireLessonUnlockedForStudent(userId, course.id, lesson.id, enrollment);
     const progress = await this.upsertLessonViewProgress({
       enrollmentId: enrollment.id,
       userId,
@@ -729,10 +735,12 @@ export class CoursesService {
     });
     const serializedProgress = this.serializeProgress(progress);
     const serializedLessonProgress = this.serializeLessonProgress(progress);
+    const quizPassed = await this.resolveLessonQuizPassed(userId, lesson.quiz);
 
     return {
       lesson: {
         ...this.serializeLesson(lesson),
+        quizPassed,
         progress: serializedLessonProgress,
       },
       watermark: {
@@ -755,6 +763,7 @@ export class CoursesService {
     const resolvedCourseId = course.id;
     const resolvedLessonId = lesson.id;
     const enrollment = await this.requireEnrollment(userId, resolvedCourseId);
+    await this.requireLessonUnlockedForStudent(userId, resolvedCourseId, resolvedLessonId, enrollment);
     const engagement = this.extractEngagement(progressInput);
     const completionRequested = this.resolveCompletionRequested(progressInput);
     const lessonContentMode = this.resolveSerializedLessonContentMode(lesson);
@@ -793,47 +802,33 @@ export class CoursesService {
         tx,
       );
 
-      const publishedQuiz = this.resolvePublishedQuiz(lesson.quiz);
       const alreadyCompleted = Boolean(progress.completedAt);
-      const completionRequirementsMet =
-        !publishedQuiz && this.isCompletionThresholdMet(lessonContentMode, progress);
-      const shouldComplete =
-        alreadyCompleted ||
-        (completionRequested &&
-          (completionRequirementsMet || Boolean(publishedQuiz)));
+      const completionDecision = await this.resolveLessonCompletionDecision(
+        userId,
+        lesson,
+        progress,
+        tx,
+      );
+      const shouldComplete = alreadyCompleted || completionDecision.canComplete;
 
       this.logProgressDebug('computed lesson completion decision', {
         courseId: resolvedCourseId,
         lessonId: resolvedLessonId,
         dbContentMode: lesson.contentMode,
         contentMode: lessonContentMode,
-        hasPublishedQuiz: Boolean(publishedQuiz),
         requiredReadingTimeSeconds: this.lessonHasTextContent(lessonContentMode)
           ? DEFAULT_LESSON_READING_COMPLETION_SECONDS
           : null,
-        completionRequirementsMet,
+        completionRequirementsMet: completionDecision.engagementSatisfied,
+        quizPassed: completionDecision.quizPassed,
+        hasPublishedQuiz: completionDecision.hasQuiz,
         completionRequested,
         alreadyCompleted,
         shouldComplete,
         completed: Boolean(progress.completedAt) || shouldComplete,
       });
 
-      if (shouldComplete) {
-        if (!alreadyCompleted && publishedQuiz) {
-          const passedAttempt = await tx.quizAttempt.findFirst({
-            where: {
-              quizId: publishedQuiz.id,
-              userId,
-              status: 'SUBMITTED',
-              passed: true,
-            },
-          });
-
-          if (!passedAttempt) {
-            throw new BadRequestException('This lesson requires a passed quiz before completion');
-          }
-        }
-
+      if (!alreadyCompleted && shouldComplete) {
         progress = await this.completeLessonProgress(
           {
             enrollmentId: enrollment.id,
@@ -849,6 +844,7 @@ export class CoursesService {
       return {
         progress,
         courseProgress: await this.getCourseProgressSummary(userId, resolvedCourseId, tx),
+        completion: completionDecision,
       };
     });
 
@@ -859,6 +855,7 @@ export class CoursesService {
       lessonProgress: serializedLessonProgress,
       progress: serializedProgress,
       courseProgress: result.courseProgress,
+      completion: result.completion,
     };
   }
 
@@ -1461,6 +1458,123 @@ export class CoursesService {
     };
   }
 
+  async requireLessonUnlockedForStudent(
+    userId: string,
+    courseId: string,
+    lessonId: string,
+    enrollment?: StudentEnrollmentRecord | null,
+    runner: PrismaRunner = this.prisma,
+  ) {
+    const studentEnrollment =
+      enrollment ??
+      (await runner.enrollment.findUnique({
+        where: {
+          userId_courseId: {
+            userId,
+            courseId,
+          },
+        },
+      }));
+
+    if (!studentEnrollment) {
+      throw new ForbiddenException('Enrollment required');
+    }
+
+    const publishedLessons = await this.listPublishedLessonSummaries(courseId, runner);
+    const lessonIndex = publishedLessons.findIndex((lesson) => lesson.id === lessonId);
+
+    if (lessonIndex === -1) {
+      throw new NotFoundException('Lesson not found');
+    }
+
+    if (lessonIndex === 0) {
+      return;
+    }
+
+    const previousLesson = publishedLessons[lessonIndex - 1];
+    const previousProgress = await runner.lessonProgress.findUnique({
+      where: {
+        userId_lessonId: {
+          userId,
+          lessonId: previousLesson.id,
+        },
+      },
+      select: {
+        enrollmentId: true,
+        completedAt: true,
+      },
+    });
+
+    if (
+      !previousProgress?.completedAt ||
+      previousProgress.enrollmentId !== studentEnrollment.id
+    ) {
+      throw new ForbiddenException('Complete the previous lesson before accessing this lesson');
+    }
+  }
+
+  async completeLessonIfEligible(
+    input: {
+      enrollmentId: string;
+      userId: string;
+      courseId: string;
+      lessonId: string;
+      engagement?: LessonEngagementInput;
+    },
+    runner: PrismaRunner = this.prisma,
+  ) {
+    const lesson = await runner.lesson.findFirst({
+      where: {
+        id: input.lessonId,
+        courseId: input.courseId,
+        status: LessonStatus.PUBLISHED,
+        publishedAt: {
+          not: null,
+        },
+        section: {
+          status: 'PUBLISHED',
+          publishedAt: {
+            not: null,
+          },
+        },
+        course: {
+          status: CourseStatus.PUBLISHED,
+          publishedAt: {
+            not: null,
+          },
+        },
+      },
+      include: {
+        quiz: {
+          select: {
+            id: true,
+            status: true,
+            publishedAt: true,
+            targetType: true,
+          },
+        },
+      },
+    });
+
+    if (!lesson) {
+      throw new NotFoundException('Lesson not found');
+    }
+
+    const progress = await this.upsertLessonViewProgress(input, runner);
+    const completionDecision = await this.resolveLessonCompletionDecision(
+      input.userId,
+      lesson,
+      progress,
+      runner,
+    );
+
+    if (!progress.completedAt && completionDecision.canComplete) {
+      return this.completeLessonProgress(input, runner);
+    }
+
+    return progress;
+  }
+
   async touchEnrollmentLastAccessed(
     enrollmentId: string,
     runner: PrismaRunner = this.prisma,
@@ -1761,6 +1875,83 @@ export class CoursesService {
     return sections.flatMap((section) => section.lessons);
   }
 
+  private async listPublishedLessonSummaries(
+    courseId: string,
+    runner: PrismaRunner = this.prisma,
+  ) {
+    const course = await runner.course.findFirst({
+      where: {
+        id: courseId,
+        status: CourseStatus.PUBLISHED,
+        publishedAt: {
+          not: null,
+        },
+      },
+      include: {
+        sections: {
+          where: {
+            status: 'PUBLISHED',
+            publishedAt: {
+              not: null,
+            },
+          },
+          orderBy: {
+            position: 'asc',
+          },
+          include: {
+            lessons: {
+              where: {
+                status: LessonStatus.PUBLISHED,
+                publishedAt: {
+                  not: null,
+                },
+              },
+              orderBy: {
+                position: 'asc',
+              },
+              select: {
+                id: true,
+                slug: true,
+                title: true,
+                position: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!course) {
+      throw new NotFoundException('Course not found');
+    }
+
+    return this.flattenPublishedLessons(course.sections);
+  }
+
+  private resolveUnlockedLessonIds(
+    publishedLessons: PublishedLessonSummary[],
+    completedLessonIds: Set<string>,
+    isEnrolled: boolean,
+  ) {
+    const unlockedLessonIds = new Set<string>();
+
+    if (!isEnrolled) {
+      return unlockedLessonIds;
+    }
+
+    let previousLessonCompleted = true;
+
+    for (const lesson of publishedLessons) {
+      if (previousLessonCompleted) {
+        unlockedLessonIds.add(lesson.id);
+      }
+
+      previousLessonCompleted = completedLessonIds.has(lesson.id);
+    }
+
+    return unlockedLessonIds;
+  }
+
   private buildStudentCourseState(
     enrollment: StudentEnrollmentRecord | null,
     publishedLessons: PublishedLessonSummary[],
@@ -2057,6 +2248,80 @@ export class CoursesService {
       progress.scrollPercent >= LESSON_SCROLL_COMPLETION_PERCENT &&
       progress.readingTimeSeconds >= DEFAULT_LESSON_READING_COMPLETION_SECONDS
     );
+  }
+
+  private async resolveLessonCompletionDecision(
+    userId: string,
+    lesson: LessonModeSerializationInput & {
+      quiz?: {
+        id?: string;
+        status?: QuizStatus;
+        publishedAt?: Date | null;
+        targetType?: QuizTargetType;
+      } | null;
+    },
+    progress: {
+      scrollPercent: number;
+      watchPercent: number;
+      readingTimeSeconds: number;
+    },
+    runner: PrismaRunner = this.prisma,
+  ) {
+    const lessonContentMode = this.resolveSerializedLessonContentMode(lesson);
+    const engagementSatisfied = this.isCompletionThresholdMet(lessonContentMode, progress);
+    const publishedQuiz = this.resolvePublishedQuiz(lesson.quiz);
+    const quizPassed = publishedQuiz?.id
+      ? await this.hasPassedQuizAttempt(userId, publishedQuiz.id, runner)
+      : true;
+
+    return {
+      canComplete: engagementSatisfied && quizPassed,
+      engagementSatisfied,
+      quizPassed,
+      hasQuiz: Boolean(publishedQuiz),
+    };
+  }
+
+  private async resolveLessonQuizPassed(
+    userId: string,
+    quiz:
+      | {
+          id?: string;
+          status?: QuizStatus;
+          publishedAt?: Date | null;
+          targetType?: QuizTargetType;
+        }
+      | null
+      | undefined,
+    runner: PrismaRunner = this.prisma,
+  ) {
+    const publishedQuiz = this.resolvePublishedQuiz(quiz);
+
+    if (!publishedQuiz?.id) {
+      return null;
+    }
+
+    return this.hasPassedQuizAttempt(userId, publishedQuiz.id, runner);
+  }
+
+  private async hasPassedQuizAttempt(
+    userId: string,
+    quizId: string,
+    runner: PrismaRunner = this.prisma,
+  ) {
+    const passedAttempt = await runner.quizAttempt.findFirst({
+      where: {
+        quizId,
+        userId,
+        status: QuizAttemptStatus.SUBMITTED,
+        passed: true,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return Boolean(passedAttempt);
   }
 
   private clamp(value: number, min: number, max: number) {

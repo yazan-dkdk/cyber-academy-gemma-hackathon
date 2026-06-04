@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { LessonPagePanel } from "@/components/courses/LessonPagePanel";
-import { fetchCourseFromMockApi } from "@/lib/courses/api-client";
+import { fetchCourse } from "@/lib/courses/api-client";
 import { findLessonReference } from "@/lib/courses/structure";
 
 type LessonPageProps = {
@@ -13,7 +13,7 @@ type LessonPageProps = {
 
 export async function generateMetadata({ params }: LessonPageProps): Promise<Metadata> {
   const { id, lessonId } = await params;
-  const course = await fetchCourseFromMockApi(id);
+  const course = await fetchCourse(id);
   const reference = course ? findLessonReference(course, lessonId) : null;
 
   if (!course || !reference) {
@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: LessonPageProps): Promise<Met
 
 export default async function LessonPage({ params }: LessonPageProps) {
   const { id, lessonId } = await params;
-  const course = await fetchCourseFromMockApi(id);
+  const course = await fetchCourse(id);
   const reference = course ? findLessonReference(course, lessonId) : null;
 
   if (!course || !reference) {

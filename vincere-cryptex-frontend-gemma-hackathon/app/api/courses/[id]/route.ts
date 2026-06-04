@@ -1,4 +1,4 @@
-import { getMockCourseById } from "@/lib/courses/mock-api";
+import { fetchCourse } from "@/lib/courses/api-client";
 
 type CourseRouteContext = {
   params: Promise<{
@@ -8,7 +8,7 @@ type CourseRouteContext = {
 
 export async function GET(_request: Request, context: CourseRouteContext) {
   const { id } = await context.params;
-  const course = await getMockCourseById(id);
+  const course = await fetchCourse(id, `/api/courses/${id}`);
 
   if (!course) {
     return Response.json({ error: "Course not found" }, { status: 404 });

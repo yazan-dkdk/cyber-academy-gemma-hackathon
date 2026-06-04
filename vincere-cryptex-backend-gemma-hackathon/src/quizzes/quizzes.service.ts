@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -29,9 +30,13 @@ interface SubmittedAnswerInput {
 @Injectable()
 export class QuizzesService {
   constructor(
+    @Inject(PrismaService)
     private readonly prisma: PrismaService,
+    @Inject(CoursesService)
     private readonly coursesService: CoursesService,
+    @Inject(ActivityService)
     private readonly activityService: ActivityService,
+    @Inject(QuizSubmissionQuery)
     private readonly quizSubmissionQuery: QuizSubmissionQuery,
   ) {}
 
@@ -61,16 +66,17 @@ export class QuizzesService {
 
     try {
       const attemptResult = await this.prisma.$transaction(async (tx) => {
-        const existingSubmittedAttempt = await tx.quizAttempt.findFirst({
+        const existingPassedAttempt = await tx.quizAttempt.findFirst({
           where: {
             userId,
             quizId,
             status: QuizAttemptStatus.SUBMITTED,
+            passed: true,
           },
         });
 
-        if (existingSubmittedAttempt) {
-          throw new ConflictException('Quiz has already been submitted');
+        if (existingPassedAttempt) {
+          throw new ConflictException('Quiz has already been passed');
         }
 
         const existingAttempt = await tx.quizAttempt.findFirst({
@@ -85,6 +91,62 @@ export class QuizzesService {
           return {
             attempt: existingAttempt,
             reusedExistingAttempt: true,
+          };
+        }
+
+        const failedSubmittedAttempt = await tx.quizAttempt.findFirst({
+          where: {
+            userId,
+            quizId,
+            status: QuizAttemptStatus.SUBMITTED,
+            passed: false,
+          },
+          orderBy: {
+            submittedAt: 'desc',
+          },
+        });
+
+        if (failedSubmittedAttempt) {
+          await tx.quizAttemptAnswer.deleteMany({
+            where: {
+              attemptId: failedSubmittedAttempt.id,
+            },
+          });
+
+          const reopenedAttempt = await tx.quizAttempt.update({
+            where: {
+              id: failedSubmittedAttempt.id,
+            },
+            data: {
+              status: QuizAttemptStatus.IN_PROGRESS,
+              passPercentage: quiz.passPercentage,
+              totalQuestions: quiz.questions.length,
+              answeredQuestions: 0,
+              correctAnswers: null,
+              scorePercentage: null,
+              passed: null,
+              submittedAt: null,
+            },
+          });
+
+          await this.coursesService.touchEnrollmentLastAccessed(quiz.course.enrollments[0]!.id, tx);
+          await this.activityService.log({
+            userId,
+            activityType: ActivityType.QUIZ_STARTED,
+            entityType: EntityType.QUIZ,
+            entityId: quiz.id,
+            metadata: {
+              courseId: quiz.courseId,
+              lessonId: quiz.lessonId,
+              attemptId: reopenedAttempt.id,
+              retake: true,
+            },
+            runner: tx,
+          });
+
+          return {
+            attempt: reopenedAttempt,
+            reusedExistingAttempt: false,
           };
         }
 
@@ -133,16 +195,17 @@ export class QuizzesService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        const concurrentSubmittedAttempt = await this.prisma.quizAttempt.findFirst({
+        const concurrentPassedAttempt = await this.prisma.quizAttempt.findFirst({
           where: {
             userId,
             quizId,
             status: QuizAttemptStatus.SUBMITTED,
+            passed: true,
           },
         });
 
-        if (concurrentSubmittedAttempt) {
-          throw new ConflictException('Quiz has already been submitted');
+        if (concurrentPassedAttempt) {
+          throw new ConflictException('Quiz has already been passed');
         }
 
         const concurrentAttempt = await this.prisma.quizAttempt.findFirst({
@@ -275,7 +338,7 @@ export class QuizzesService {
 
       if (lockedAttempt.lesson_id) {
         progress = passed
-          ? await this.coursesService.completeLessonProgress(
+          ? await this.coursesService.completeLessonIfEligible(
               {
                 enrollmentId: lockedAttempt.enrollment_id,
                 userId,
@@ -412,6 +475,15 @@ export class QuizzesService {
 
     if (!quiz || quiz.course.enrollments.length === 0) {
       throw new NotFoundException('Quiz not found');
+    }
+
+    if (quiz.targetType === QuizTargetType.LESSON && quiz.lessonId) {
+      await this.coursesService.requireLessonUnlockedForStudent(
+        userId,
+        quiz.courseId,
+        quiz.lessonId,
+        quiz.course.enrollments[0],
+      );
     }
 
     return quiz;

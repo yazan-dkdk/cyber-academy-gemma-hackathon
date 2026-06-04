@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { CourseCatalog } from "@/components/courses/CourseCatalog";
-import { fetchCourseCatalogFromMockApi } from "@/lib/courses/api-client";
+import { fetchCourseCatalog } from "@/lib/courses/api-client";
 
 export const metadata: Metadata = {
   title: "Courses",
@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 export default async function CoursesPage() {
-  const courses = await fetchCourseCatalogFromMockApi();
+  const courses = await fetchCourseCatalog();
 
   return <CourseCatalog courses={courses} />;
 }

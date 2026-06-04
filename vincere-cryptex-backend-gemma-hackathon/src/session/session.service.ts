@@ -197,10 +197,11 @@ export class SessionService {
     reply.setCookie(this.configService.sessionCookieName, sessionId, {
       path: '/',
       httpOnly: true,
-      secure: this.configService.isProduction,
+      secure: this.configService.cookieSecure,
       sameSite: 'lax',
       signed: true,
       maxAge: this.configService.sessionTtlSeconds,
+      domain: this.configService.cookieDomain ?? undefined,
     });
   }
 
@@ -208,9 +209,10 @@ export class SessionService {
     reply.clearCookie(this.configService.sessionCookieName, {
       path: '/',
       httpOnly: true,
-      secure: this.configService.isProduction,
+      secure: this.configService.cookieSecure,
       sameSite: 'lax',
       signed: true,
+      domain: this.configService.cookieDomain ?? undefined,
     });
   }
 

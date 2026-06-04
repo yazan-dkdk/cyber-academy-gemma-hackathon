@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { AuditLog, Prisma } from '@prisma/client';
 
 import { PrismaRunner } from '../common/types/prisma-runner.type';
@@ -14,7 +14,10 @@ interface LogAuditInput {
 
 @Injectable()
 export class AuditService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService)
+    private readonly prisma: PrismaService,
+  ) {}
 
   async log(input: LogAuditInput): Promise<AuditLog> {
     const runner = input.runner ?? this.prisma;

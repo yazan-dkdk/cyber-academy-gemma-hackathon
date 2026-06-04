@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CourseDetailPanel } from "@/components/courses/CourseDetailPanel";
-import { fetchCourseFromMockApi } from "@/lib/courses/api-client";
+import { fetchCourse } from "@/lib/courses/api-client";
 
 type CoursePageProps = {
   params: Promise<{
@@ -11,7 +11,7 @@ type CoursePageProps = {
 
 export async function generateMetadata({ params }: CoursePageProps): Promise<Metadata> {
   const { id } = await params;
-  const course = await fetchCourseFromMockApi(id);
+  const course = await fetchCourse(id);
 
   if (!course) {
     return {
@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: CoursePageProps): Promise<Met
 
 export default async function CourseDetailsPage({ params }: CoursePageProps) {
   const { id } = await params;
-  const course = await fetchCourseFromMockApi(id);
+  const course = await fetchCourse(id);
 
   if (!course) {
     notFound();

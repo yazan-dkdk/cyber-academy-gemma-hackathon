@@ -17,6 +17,9 @@ export type CourseLesson = {
   video?: unknown;
   protectedMedia?: unknown;
   media?: unknown;
+  hasQuiz?: boolean | null;
+  quizId?: string | null;
+  quizPassed?: boolean | null;
   durationMinutes: number;
   order: number;
   isLocked?: boolean | null;

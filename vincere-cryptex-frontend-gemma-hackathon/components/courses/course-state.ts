@@ -12,6 +12,7 @@ import {
   updateStudentLessonProgress,
   StudentApiError,
 } from "@/lib/student-api-client";
+import { logCourseBackendFallback } from "@/lib/courses/fallback-logging";
 import type {
   Course,
   CourseDifficulty,
@@ -33,8 +34,8 @@ import {
 } from "@/lib/courses/routing";
 
 const completedReadingTimeSeconds = 10;
-const completedTextScrollPercent = 95;
-const completedWatchPercent = 82;
+const completedTextScrollPercent = 90;
+const completedWatchPercent = 85;
 const legacyProgressPrefixes = [
   "vincere-cryptex:course-enrollment:",
   "vincere-cryptex:course-progress:",
@@ -927,6 +928,43 @@ function parseLessonStates(value: unknown): LessonState[] {
     .filter((item): item is LessonState => Boolean(item));
 }
 
+function parseSectionLessonStates(value: unknown): LessonState[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((section) => {
+    if (!isRecord(section)) {
+      return [];
+    }
+
+    return (readArray(section, ["lessons", "items"]) ?? [])
+      .map((lesson) => {
+        if (!isRecord(lesson)) {
+          return null;
+        }
+
+        const lessonId = readString(lesson, ["id", "_id", "lessonId", "slug", "lessonSlug"]);
+
+        if (!lessonId) {
+          return null;
+        }
+
+        return {
+          lessonId,
+          type: normalizeLessonMode(lesson.contentMode, lesson.type ?? lesson.lessonType),
+          isCompleted: Boolean(
+            readBoolean(lesson, ["isCompleted", "completed"]) ??
+              readString(lesson, ["completedAt", "completed_at"]),
+          ),
+          isLocked: Boolean(readBoolean(lesson, ["isLocked", "locked"])),
+          progress: normalizeProgressValues(lesson.progress ?? lesson.lessonProgress),
+        };
+      })
+      .filter((item): item is LessonState => Boolean(item));
+  });
+}
+
 function parseLessonProgressRecord(value: unknown) {
   if (!isRecord(value)) {
     return {};
@@ -978,10 +1016,15 @@ function extractProgressMetadata(value: unknown): ProgressMetadata {
   const nestedCompletedLessonIds = parseIdArray(
     readNestedArray(record, ["progress", "courseProgress"], ["completedLessonIds", "completedLessons"]),
   );
-  const lessonStates = parseLessonStates(
+  const explicitLessonStates = parseLessonStates(
     readArray(record, ["lessonStates", "lessonsProgress"]) ??
       readNestedArray(record, ["progress", "courseProgress"], ["lessonStates", "lessonsProgress"]),
   );
+  const sectionLessonStates = parseSectionLessonStates(
+    readArray(record, ["sections", "modules"]) ??
+      readNestedArray(record, ["course", "courseDetails", "courseInfo"], ["sections", "modules"]),
+  );
+  const lessonStates = [...sectionLessonStates, ...explicitLessonStates];
   const lessonProgress = {
     ...parseLessonProgressRecord(readNestedRecord(record, ["lessonProgress"])),
     ...parseLessonProgressRecord(readNestedRecord(record, ["progress", "courseProgress"])?.lessonProgress),
@@ -1005,23 +1048,32 @@ function extractProgressMetadata(value: unknown): ProgressMetadata {
       ]),
     ),
     completedCount:
-      readNumber(record, ["completedCount", "completedLessonCount", "completedLessonsCount"]) ??
+      readNumber(record, ["completedCount", "completedLessonCount", "completedLessonsCount", "completedLessons"]) ??
       readNestedNumber(record, ["progress", "courseProgress"], [
         "completedCount",
         "completedLessonCount",
         "completedLessonsCount",
+        "completedLessons",
       ]),
     totalLessons:
       readNumber(record, ["totalLessons", "lessonCount", "lessonsCount"]) ??
       readNestedNumber(record, ["progress", "courseProgress"], ["totalLessons", "lessonCount", "lessonsCount"]),
     currentLessonId:
-      readString(record, ["currentLessonId", "currentLessonID"]) ??
-      readNestedString(record, ["currentLesson"], ["id", "lessonId"]) ??
-      readNestedString(record, ["progress", "courseProgress"], ["currentLessonId", "currentLessonID"]),
+      readString(record, ["currentLessonId", "currentLessonID", "currentLessonSlug", "lessonId", "lessonSlug"]) ??
+      readNestedString(record, ["currentLesson"], ["id", "lessonId", "slug", "lessonSlug"]) ??
+      readNestedString(record, ["progress", "courseProgress"], [
+        "currentLessonId",
+        "currentLessonID",
+        "currentLessonSlug",
+      ]),
     nextLessonId:
-      readString(record, ["nextLessonId", "nextLessonID"]) ??
-      readNestedString(record, ["nextLesson"], ["id", "lessonId"]) ??
-      readNestedString(record, ["progress", "courseProgress"], ["nextLessonId", "nextLessonID"]),
+      readString(record, ["nextLessonId", "nextLessonID", "nextLessonSlug", "lessonId", "lessonSlug"]) ??
+      readNestedString(record, ["nextLesson"], ["id", "lessonId", "slug", "lessonSlug"]) ??
+      readNestedString(record, ["progress", "courseProgress"], [
+        "nextLessonId",
+        "nextLessonID",
+        "nextLessonSlug",
+      ]),
     lessonStates,
     lessonProgress,
     lastAccessedAt:
@@ -1389,8 +1441,9 @@ function normalizeLesson(value: unknown, fallback?: CourseLesson | null): Course
     record?.protectedSession ??
     fallback?.protectedMedia ??
     null;
+  const quizRecord = isRecord(record?.quiz) ? record.quiz : null;
   const articleContent = normalizeArticleContent(
-    record?.text ?? record?.articleContent ?? record?.content ?? record?.body,
+    record?.textContent ?? record?.text ?? record?.articleContent ?? record?.content ?? record?.body,
     fallback?.articleContent ?? [],
   );
 
@@ -1402,7 +1455,7 @@ function normalizeLesson(value: unknown, fallback?: CourseLesson | null): Course
     type: normalizedType ?? lessonMode,
     contentMode: normalizedContentMode,
     text:
-      (record && readString(record, ["text"])) ??
+      (record && readString(record, ["textContent", "text"])) ??
       fallback?.text ??
       (articleContent.length ? articleContent.join("\n\n") : null),
     video,
@@ -1415,6 +1468,20 @@ function normalizeLesson(value: unknown, fallback?: CourseLesson | null): Course
       record?.protectedMedia ??
       record?.protectedSession ??
       fallback?.media ??
+      null,
+    hasQuiz:
+      (record && readBoolean(record, ["hasQuiz", "quizAvailable"])) ??
+      (quizRecord && readBoolean(quizRecord, ["hasQuiz"])) ??
+      fallback?.hasQuiz ??
+      null,
+    quizId:
+      (record && readString(record, ["quizId", "quizID"])) ??
+      (quizRecord && readString(quizRecord, ["id", "quizId"])) ??
+      fallback?.quizId ??
+      null,
+    quizPassed:
+      (record && readBoolean(record, ["quizPassed", "hasPassedQuiz"])) ??
+      fallback?.quizPassed ??
       null,
     durationMinutes:
       Math.round((record && readNumber(record, ["durationMinutes", "duration"])) ?? fallback?.durationMinutes ?? 0) || 0,
@@ -1704,18 +1771,28 @@ function buildLessonStates(
 ) {
   const completedLessonSet = new Set(metadata.completedLessonIds);
   const backendStateById = new Map(metadata.lessonStates.map((lessonState) => [lessonState.lessonId, lessonState]));
+  const useCompletedCountFallback =
+    metadata.completedLessonIds.length === 0 &&
+    metadata.lessonStates.every((lessonState) => !lessonState.isCompleted) &&
+    metadata.completedCount !== null;
+  const completedCountFallback = Math.max(
+    0,
+    Math.min(Math.round(metadata.completedCount ?? 0), lessons.length),
+  );
   let previousLessonsComplete = true;
 
-  return lessons.map((lesson) => {
+  return lessons.map((lesson, lessonIndex) => {
     const backendState = backendStateById.get(lesson.id);
-    const isCompleted = forceCompleted || backendState?.isCompleted || completedLessonSet.has(lesson.id);
+    const isCompleted =
+      forceCompleted ||
+      backendState?.isCompleted ||
+      completedLessonSet.has(lesson.id) ||
+      (useCompletedCountFallback && lessonIndex < completedCountFallback);
     const backendLocked = backendState ? backendState.isLocked : lesson.isLocked ?? null;
     const isLocked =
       forceCompleted
         ? false
-        : !isEnrolled ||
-          (backendLocked ??
-            (!previousLessonsComplete && !metadata.currentLessonId && !metadata.nextLessonId));
+        : !isEnrolled || (backendLocked ?? !previousLessonsComplete);
     const progress = metadata.lessonProgress[lesson.id] ?? backendState?.progress ?? normalizeProgressValues(null);
 
     if (!isCompleted) {
@@ -2909,7 +2986,7 @@ function findPublicCourseForStudentRecord(
   if (record) {
     const slug = normalizeCourseRouteId(getCourseSlugFromRecord(record));
     const nestedCourseId = readCourseContainerString(record, ["id", "_id", "slug", "courseSlug"]);
-    const topLevelId = readString(record, ["id", "_id"]);
+    const topLevelId = readString(record, ["id", "_id", "courseId", "courseID"]);
 
     for (const candidateId of [slug, nestedCourseId, topLevelId]) {
       const normalizedCandidateId = normalizeCourseRouteId(candidateId);
@@ -3010,11 +3087,13 @@ export function useStudentCourses(enabled: boolean, publicCourses: CourseSummary
           return;
         }
 
-        setState((currentState) => ({
-          data: currentState.data,
+        logCourseBackendFallback("/courses", "student_courses_fetch_failed");
+
+        setState({
+          data: publicCourses,
           isLoading: false,
           errorMessage: getErrorMessage(error, "Unable to load student courses."),
-        }));
+        });
       });
 
     return () => {
@@ -3064,6 +3143,7 @@ async function loadStudentCourseShell(fallbackCourse: Course) {
     const coursePayload = await fetchStudentCourse(apiCourseId);
     return normalizeCourseDetail(coursePayload, fallbackCourse);
   } catch {
+    logCourseBackendFallback(`/courses/${apiCourseId}`, "student_course_shell_fetch_failed");
     return fallbackCourse;
   }
 }
@@ -3111,6 +3191,10 @@ async function fetchNormalizedStudentLesson(
       }),
     };
   } catch (lessonError) {
+    logCourseBackendFallback(
+      `/courses/${apiCourseId}/lessons/${lessonId}`,
+      "student_lesson_fetch_failed",
+    );
     const courseWithProgress = await loadStudentCourseShell(fallbackCourse);
     const status = lessonError instanceof StudentApiError ? lessonError.status : 0;
     const deniedReason =
@@ -3184,6 +3268,8 @@ export function useStudentCourse(
 
       return refreshedCourse;
     } catch (error) {
+      logCourseBackendFallback(`/courses/${getCourseRouteId(fallbackCourse)}`, "student_course_fetch_failed");
+
       if (mountedRef.current) {
         setState((currentState) => ({
           data: currentState.data,
@@ -3221,6 +3307,8 @@ export function useStudentCourse(
         if (!isMounted) {
           return;
         }
+
+        logCourseBackendFallback(`/courses/${getCourseRouteId(fallbackCourse)}`, "student_course_fetch_failed");
 
         setState((currentState) => ({
           data: currentState.data,
@@ -3304,7 +3392,7 @@ export function useStudentLesson(
     try {
       const result = await fetchNormalizedStudentLesson(fallbackCourse, lessonId);
 
-      rememberStudentCourseDetailSource(result.course);
+      rememberStudentCourseDetailSource(result.course, true);
 
       if (mountedRef.current) {
         setState({
@@ -3317,6 +3405,10 @@ export function useStudentLesson(
 
       return result;
     } catch (error) {
+      logCourseBackendFallback(
+        `/courses/${getCourseRouteId(fallbackCourse)}/lessons/${lessonId}`,
+        "student_lesson_fetch_failed",
+      );
       const currentState = stateRef.current;
       const course = currentState.data;
       const access = currentState.access.canAccess
@@ -3376,6 +3468,10 @@ export function useStudentLesson(
           return;
         }
 
+        logCourseBackendFallback(
+          `/courses/${getCourseRouteId(fallbackCourse)}/lessons/${lessonId}`,
+          "student_lesson_fetch_failed",
+        );
         const errorMessage = getErrorMessage(error, "Unable to load this lesson from the backend.");
 
         setState((currentState) => ({
@@ -3434,7 +3530,15 @@ export function normalizeContinueLearningItems(
     }
   });
 
-  return extractItemArray(payload)
+  const continueLearningRecords = extractItemArray(payload);
+  const normalizedRecords =
+    continueLearningRecords.length || !isRecord(payload)
+      ? continueLearningRecords
+      : readBoolean(payload, ["hasEnrollment"]) === false && !readString(payload, ["courseId", "courseSlug"])
+        ? []
+        : [payload];
+
+  return normalizedRecords
     .map<ContinueLearningItem | null>((item) => {
       const record = combineNestedCourseRecord(item);
       const course = normalizeCourseSummary(

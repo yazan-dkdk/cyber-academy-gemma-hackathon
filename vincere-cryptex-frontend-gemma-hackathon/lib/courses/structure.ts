@@ -47,7 +47,7 @@ export function getLessonTypes(course: Course) {
   const lessonTypes = new Set<LessonType>();
 
   for (const reference of getOrderedLessonReferences(course)) {
-    lessonTypes.add(reference.lesson.type);
+    lessonTypes.add(reference.lesson.contentMode ?? reference.lesson.type);
   }
 
   return Array.from(lessonTypes);

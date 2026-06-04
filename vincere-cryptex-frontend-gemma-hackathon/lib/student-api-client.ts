@@ -20,6 +20,13 @@ function buildStudentApiUrl(path: string) {
   return `/api/student${normalizedPath}`;
 }
 
+function buildApiUrl(namespace: string, path: string) {
+  const normalizedNamespace = namespace.startsWith("/") ? namespace : `/${namespace}`;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  return `/api${normalizedNamespace}${normalizedPath}`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -109,6 +116,29 @@ async function studentRequest<T>(path: string, init: RequestInit = {}) {
   }
 
   return payload as T;
+}
+
+async function sameOriginApiRequest<T>(namespace: string, path: string, init: RequestInit = {}) {
+  const url = buildApiUrl(namespace, path);
+
+  if (typeof window === "undefined") {
+    console.warn("student api blocked on server runtime");
+    throw new StudentApiError("Student API requests must run in the browser.", 0, null);
+  }
+
+  const headers = new Headers(init.headers);
+
+  if (init.body !== undefined && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(url, {
+    ...init,
+    credentials: "include",
+    headers,
+  });
+
+  return parseStudentResponse<T>(response);
 }
 
 async function parseStudentResponse<T>(
@@ -284,6 +314,26 @@ export function updateStudentLessonProgress(courseId: string, lessonId: string, 
     `/api/student/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/progress`,
     options,
   ).then((response) => parseStudentResponse<unknown>(response));
+}
+
+export function fetchStudentQuiz(quizId: string) {
+  return sameOriginApiRequest<unknown>("quizzes", `/${encodeURIComponent(quizId)}`);
+}
+
+export function startStudentQuizAttempt(quizId: string) {
+  return sameOriginApiRequest<unknown>("quizzes", `/${encodeURIComponent(quizId)}/attempts/start`, {
+    method: "POST",
+  });
+}
+
+export function submitStudentQuizAttempt(
+  attemptId: string,
+  answers: Array<{ questionId: string; choiceId: string }>,
+) {
+  return sameOriginApiRequest<unknown>("quiz-attempts", `/${encodeURIComponent(attemptId)}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ answers }),
+  });
 }
 
 export function fetchStudentContinueLearning() {
