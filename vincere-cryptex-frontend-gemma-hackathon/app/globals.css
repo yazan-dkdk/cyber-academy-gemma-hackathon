@@ -321,6 +321,7 @@ img {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
   transform: translateX(-110%);
   transition: transform 420ms ease;
+  pointer-events: none;
 }
 
 .primary-button:hover .primary-button__sweep {
@@ -910,6 +911,40 @@ img {
 
 .catalog-action:active::after {
   animation: catalog-ripple 520ms ease-out;
+}
+
+.catalog-continue-card::before,
+.catalog-continue-card::after,
+.catalog-continue-card .catalog-visual,
+.catalog-continue-card .catalog-visual::before,
+.catalog-continue-card .catalog-visual::after,
+.catalog-continue-card .catalog-visual *,
+.catalog-continue-card .catalog-action::after {
+  pointer-events: none;
+}
+
+.catalog-continue-card .catalog-action {
+  position: relative;
+  z-index: 20;
+  pointer-events: auto;
+  isolation: isolate;
+  transform: none;
+}
+
+.catalog-continue-card .catalog-action::before {
+  content: "";
+  position: absolute;
+  inset: -0.75rem;
+  z-index: 1;
+}
+
+.catalog-continue-card .catalog-action:hover,
+.catalog-continue-card .catalog-action:active {
+  transform: none;
+}
+
+.catalog-continue-card .catalog-action > span {
+  pointer-events: none;
 }
 
 .catalog-visual {
@@ -2223,6 +2258,13 @@ img {
     0 0 72px rgba(0, 240, 255, 0.2);
 }
 
+.lesson-media-shell--video,
+.lesson-media-shell--video:hover,
+.lesson-console-main:hover .lesson-media-shell--video {
+  min-height: 0;
+  filter: none;
+}
+
 .lesson-media-shell[data-lesson-type="HYBRID"] {
   outline-color: rgba(255, 79, 216, 0.42);
   box-shadow:
@@ -2246,6 +2288,12 @@ img {
   box-shadow:
     inset 0 0 48px rgba(0, 240, 255, 0.055),
     inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.lesson-media-shell--video .lesson-secure-frame {
+  min-height: 0;
+  grid-template-rows: auto minmax(0, auto);
+  overflow: visible;
 }
 
 .lesson-secure-frame__grid,
@@ -2345,6 +2393,35 @@ img {
   padding: 2rem;
   color: #00f0ff;
   transform: none;
+}
+
+.lesson-secure-frame__video {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-items: center;
+  min-height: 0;
+  padding: clamp(0.85rem, 2vw, 1.35rem) 0 0;
+}
+
+.lesson-video-player {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(0, 240, 255, 0.28);
+  background: #03060c;
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.36),
+    0 0 32px rgba(0, 240, 255, 0.12);
+  object-fit: contain;
+}
+
+.lesson-video-player:focus-visible {
+  outline: 2px solid rgba(0, 240, 255, 0.72);
+  outline-offset: 0.18rem;
 }
 
 .lesson-secure-frame__controls {
@@ -3536,10 +3613,19 @@ img {
   filter: brightness(1.07) saturate(1.06);
 }
 
+.catalog-tilt-card--continue,
+.catalog-tilt-card--continue:hover {
+  transform: none;
+}
+
 .catalog-card-content {
   transform: translate3d(calc(var(--parallax-x) * -0.24), calc(var(--parallax-y) * -0.24), 72px);
   transform-style: preserve-3d;
   transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.catalog-tilt-card--continue .catalog-card-content {
+  transform: none;
 }
 
 .catalog-course-card,

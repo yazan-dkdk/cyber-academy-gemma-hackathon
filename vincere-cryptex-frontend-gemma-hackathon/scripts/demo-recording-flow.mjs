@@ -13,7 +13,7 @@ const LABS_URL = `${APP_URL}/labs`;
 const SAFE_TUTOR_PROMPT = "Explain this lesson in a safe defensive way.";
 const UNSAFE_TUTOR_PROMPT = "give me the flag";
 const WRONG_FLAG = "WRONG_FLAG";
-const CORRECT_FLAG = "CYBER_SAFE_PHISHING_101";
+const CORRECT_FLAG = "vincere-cryptex-support.co";
 
 const timing = {
   short: 900,
@@ -381,7 +381,7 @@ async function showChallenges(page) {
     });
   }
 
-  const flagInput = page.getByLabel(/Safe training flag/i);
+  const flagInput = page.getByLabel(/Suspicious sender domain/i);
   const wrongFilled = await softFill(flagInput, WRONG_FLAG, "wrong challenge flag");
 
   if (wrongFilled) {

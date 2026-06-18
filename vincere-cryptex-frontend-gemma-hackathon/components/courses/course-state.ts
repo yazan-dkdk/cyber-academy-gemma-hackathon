@@ -32,6 +32,10 @@ import {
   normalizeCourseRouteId,
   normalizeRouteValue,
 } from "@/lib/courses/routing";
+import {
+  applyCourseLessonVideoOverrides,
+  getLocalLessonModeOverride,
+} from "@/lib/courses/local-lesson-video-overrides";
 
 const completedReadingTimeSeconds = 10;
 const completedTextScrollPercent = 90;
@@ -1692,7 +1696,7 @@ function mergeLessonIntoCourse(course: Course, payload: unknown, lessonId: strin
     return course;
   }
 
-  return {
+  return applyCourseLessonVideoOverrides({
     ...course,
     sections: course.sections.map((section) => ({
       ...section,
@@ -1703,7 +1707,7 @@ function mergeLessonIntoCourse(course: Course, payload: unknown, lessonId: strin
           : lesson,
       ),
     })),
-  };
+  });
 }
 
 function normalizeCourseDetail(value: unknown, fallbackCourse: Course): Course {
@@ -1721,7 +1725,7 @@ function normalizeCourseDetail(value: unknown, fallbackCourse: Course): Course {
   const metadata = remapProgressMetadata(extractProgressMetadata(record ?? fallbackCourse), lessonInputs);
   const publicationState = normalizePublicationState(record ?? value, fallbackCourse);
 
-  return {
+  return applyCourseLessonVideoOverrides({
     ...fallbackCourse,
     id: identifiers.routeId ?? getCourseRouteId(fallbackCourse),
     backendId: identifiers.backendId,
@@ -1741,7 +1745,7 @@ function normalizeCourseDetail(value: unknown, fallbackCourse: Course): Course {
     sections,
     ...metadata,
     totalLessons: metadata.totalLessons ?? getLessonIdsFromSections(sections).length,
-  };
+  });
 }
 
 function mergeStudentPayloadIntoSource(currentSource: unknown, payload: unknown) {
@@ -1764,6 +1768,7 @@ function mergeStudentPayloadIntoSource(currentSource: unknown, payload: unknown)
 }
 
 function buildLessonStates(
+  courseId: string,
   lessons: NormalizedLessonInput[],
   metadata: ProgressMetadata,
   isEnrolled: boolean,
@@ -1801,7 +1806,12 @@ function buildLessonStates(
 
     return {
       lessonId: lesson.id,
-      type: backendState?.type ?? lesson.type,
+      type:
+        getLocalLessonModeOverride(courseId, lesson.id) ??
+        getLocalLessonModeOverride(courseId, lesson.slug) ??
+        getLocalLessonModeOverride(courseId, lesson.backendId) ??
+        backendState?.type ??
+        lesson.type,
       isCompleted,
       isLocked,
       progress,
@@ -1830,7 +1840,7 @@ export function normalizeStudentCourseProgress(
     totalLessons > 0 &&
     ((metadata.progressPercent ?? 0) >= 100 ||
       (metadata.completedCount !== null && metadata.completedCount >= totalLessons));
-  const lessonStates = buildLessonStates(normalizedLessons, metadata, isEnrolled, forceCompleted);
+  const lessonStates = buildLessonStates(courseId, normalizedLessons, metadata, isEnrolled, forceCompleted);
   const completedLessonIds = Array.from(
     new Set(
       lessonStates

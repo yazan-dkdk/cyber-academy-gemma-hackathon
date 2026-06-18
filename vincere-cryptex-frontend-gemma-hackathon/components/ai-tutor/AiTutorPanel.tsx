@@ -614,7 +614,7 @@ export function AiTutorPanel({
         lessonType,
         courseTitle,
         currentProgressPercent: safeProgressPercent,
-        lessonExcerpt: safeLessonExcerpt,
+        lessonContent: safeLessonExcerpt,
       });
 
       if (!response.ok) {

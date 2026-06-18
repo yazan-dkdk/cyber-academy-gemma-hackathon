@@ -1,4 +1,5 @@
 import { logCourseBackendFallback } from "@/lib/courses/fallback-logging";
+import { applyCourseLessonVideoOverrides } from "@/lib/courses/local-lesson-video-overrides";
 import { getMockCourseById, getMockCourseCatalog } from "@/lib/courses/mock-api";
 import { normalizeCourseRouteId } from "@/lib/courses/routing";
 import type {
@@ -388,7 +389,7 @@ function normalizeBackendCourseDetail(value: unknown): Course | null {
   const sections = normalizeBackendSections(record);
   const publishedAt = readString(record, ["publishedAt"]);
 
-  return {
+  return applyCourseLessonVideoOverrides({
     id,
     backendId: getBackendIdFromCourseRecord(record, id),
     slug: readString(record, ["slug", "courseSlug", "publicSlug", "publicId", "routeId"]) ?? id,
@@ -409,7 +410,7 @@ function normalizeBackendCourseDetail(value: unknown): Course | null {
     isPublished: readBoolean(record, ["isPublished", "published"]) ?? Boolean(publishedAt),
     isVisible: readBoolean(record, ["isVisible", "visible"]) ?? true,
     sections,
-  };
+  });
 }
 
 async function enrichBackendCatalogWithDetails(courses: CourseSummary[]) {

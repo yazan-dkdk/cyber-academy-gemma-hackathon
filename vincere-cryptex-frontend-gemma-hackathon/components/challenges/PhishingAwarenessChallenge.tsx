@@ -21,13 +21,13 @@ import { askAiTutor } from "@/lib/ai-tutor-client";
 import { isStudentUser } from "@/lib/auth-roles";
 import { cn } from "@/lib/cn";
 
-const correctTrainingFlag = "CYBER_SAFE_PHISHING_101";
+const correctSenderDomainFlag = "vincere-cryptex-support.co";
 const challengeSlug = "phishing-awareness";
 const challengeApiPath = `/api/student/challenges/${challengeSlug}`;
 const lessonHref = "/courses/network-defense-foundations/lessons/ndf-firewall-rules";
 const nextRecommendedHref = "/courses/network-defense-foundations/lessons/ndf-injection-testing";
 const localSafeHint =
-  "Look at the sender, urgency, link destination, and attachment behavior. Do not click links or download files.";
+  "Compare the display name with the sender domain, then review urgency, link destination, and attachment behavior.";
 const challengeRewardXp = 100;
 
 type ChallengeStatus =
@@ -757,7 +757,7 @@ function InteractivePhishingAwarenessChallenge() {
 
   function hideTrainingFlag(hintAnswer: string) {
     return hintAnswer
-      .replace(new RegExp(correctTrainingFlag, "gi"), "[training flag hidden]")
+      .replace(new RegExp(correctSenderDomainFlag, "gi"), "[training flag hidden]")
       .replace(/\b[A-Z0-9_-]*FLAG\{[^}\r\n]{1,200}\}/gi, "[training flag hidden]")
       .replace(/\b(?:flag|answer|solution)\s*[:=]\s*["'`]?[^"'`\s\r\n]{3,200}/gi, (match) => {
         const [label] = match.split(/[:=]/);
@@ -844,7 +844,7 @@ function InteractivePhishingAwarenessChallenge() {
                 </h1>
                 <p className="mt-4 max-w-3xl text-base leading-8 text-foreground/72 sm:text-lg">
                   Analyze the email artifact, mark the warning signs, and submit the safe training
-                  flag when your defensive assessment is ready.
+                  sender domain when your defensive assessment is ready.
                 </p>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:max-w-2xl">
                   <div className={cn("border px-4 py-4", statusContent.toneClass)}>
@@ -1069,7 +1069,7 @@ function InteractivePhishingAwarenessChallenge() {
                       ? "Challenge already solved. Review the findings or continue to the next recommended lesson."
                       : isSolved
                       ? "Challenge solved. Review the findings or continue to the next recommended lesson."
-                      : "Identify at least 3 warning signs and submit the safe training flag."}
+                      : "Identify at least 3 warning signs and submit the suspicious sender domain."}
                   </p>
                 </div>
 
@@ -1198,7 +1198,7 @@ function InteractivePhishingAwarenessChallenge() {
 
                 <InputField
                   tone="cyan"
-                  label="Safe training flag"
+                  label="Suspicious sender domain"
                   value={answer}
                   onChange={(event) => {
                     setAnswer(event.target.value);
@@ -1208,7 +1208,7 @@ function InteractivePhishingAwarenessChallenge() {
                       setSubmissionMessage(null);
                     }
                   }}
-                  placeholder="Enter flag"
+                  placeholder="Enter sender domain"
                   autoComplete="off"
                   spellCheck={false}
                   disabled={isSubmitLocked || isSubmitting}

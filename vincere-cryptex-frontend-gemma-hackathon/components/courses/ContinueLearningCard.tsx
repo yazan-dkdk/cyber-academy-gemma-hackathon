@@ -40,7 +40,7 @@ export function ContinueLearningCard({ course }: ContinueLearningCardProps) {
   }
 
   return (
-    <article ref={ref} {...tiltHandlers} className="catalog-tilt-card h-full">
+    <article ref={ref} {...tiltHandlers} className="catalog-tilt-card catalog-tilt-card--continue h-full">
       <div data-tone={cardTone} className="catalog-continue-card">
         <CourseVisual
           tone={visualPreset.tone}

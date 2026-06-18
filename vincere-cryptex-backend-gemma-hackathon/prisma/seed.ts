@@ -1045,7 +1045,7 @@ const demoChallengeSeed: ChallengeSeed = {
   category: 'Defensive Analysis',
   difficulty: ChallengeDifficulty.EASY,
   points: 100,
-  flag: 'CYBER_SAFE_PHISHING_101',
+  flag: 'vincere-cryptex-support.co',
   hints: [
     {
       position: 1,
@@ -1055,7 +1055,7 @@ const demoChallengeSeed: ChallengeSeed = {
     {
       position: 2,
       title: 'Check the training cue',
-      content: 'The flag follows the all-caps CYBER_SAFE training phrase format.',
+      content: 'The flag is the suspicious sender domain shown in the From header.',
     },
   ],
 };

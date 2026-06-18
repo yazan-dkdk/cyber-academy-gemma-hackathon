@@ -106,6 +106,13 @@ type LessonQuizResult = {
 
 type LessonRuntimeState = "COMPLETED" | "CURRENT" | "LOCKED" | "AVAILABLE";
 
+type LessonVideoSource = {
+  src: string;
+  contentType?: string;
+  title?: string;
+  poster?: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -310,6 +317,68 @@ function hasBackendMetadataValue(value: unknown) {
   }
 
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function normalizePublicVideoSrc(src: string) {
+  const normalizedSrc = src.trim();
+
+  return normalizedSrc.startsWith("public/")
+    ? `/${normalizedSrc.slice("public/".length)}`
+    : normalizedSrc;
+}
+
+function normalizeLessonVideoSource(value: unknown): LessonVideoSource | null {
+  if (typeof value === "string" && value.trim()) {
+    return {
+      src: normalizePublicVideoSrc(value),
+    };
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const src = readRecordString(value, [
+    "src",
+    "url",
+    "href",
+    "path",
+    "publicPath",
+    "sourceUrl",
+    "playbackUrl",
+    "streamUrl",
+  ]);
+
+  if (src) {
+    const contentType = readRecordString(value, ["contentType", "mimeType", "mediaType"]);
+
+    return {
+      src: normalizePublicVideoSrc(src),
+      contentType: contentType?.includes("/") ? contentType : undefined,
+      title: readRecordString(value, ["title", "name", "label"]) ?? undefined,
+      poster: readRecordString(value, ["poster", "posterUrl", "thumbnail", "thumbnailUrl"]) ?? undefined,
+    };
+  }
+
+  for (const key of ["video", "file", "asset", "source"]) {
+    const nestedSource = normalizeLessonVideoSource(value[key]);
+
+    if (nestedSource) {
+      return nestedSource;
+    }
+  }
+
+  return null;
+}
+
+function getLessonVideoSource(lesson: CourseLesson) {
+  const mediaVideo = isRecord(lesson.media) ? lesson.media.video : null;
+
+  return (
+    normalizeLessonVideoSource(lesson.video) ??
+    normalizeLessonVideoSource(mediaVideo) ??
+    normalizeLessonVideoSource(lesson.media)
+  );
 }
 
 function getLessonMediaMetadataSources(lesson: CourseLesson) {
@@ -694,10 +763,13 @@ type VideoPlaceholderProps = {
   hasMediaMetadata: boolean;
   mediaLabel: string;
   metadataSources: string[];
+  videoSource: LessonVideoSource | null;
   progressPercent: number;
   thresholdPercent: number;
   isWatching: boolean;
   onStart: () => void;
+  onProgress: (progressPercent: number) => void;
+  onPlayingChange: (isPlaying: boolean) => void;
 };
 
 function VideoPlaceholder({
@@ -705,13 +777,45 @@ function VideoPlaceholder({
   hasMediaMetadata,
   mediaLabel,
   metadataSources,
+  videoSource,
   progressPercent,
   thresholdPercent,
   isWatching,
   onStart,
+  onProgress,
+  onPlayingChange,
 }: VideoPlaceholderProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hasVideoSource = Boolean(videoSource);
+  const reportVideoProgress = useCallback(() => {
+    const videoElement = videoRef.current;
+
+    if (
+      !videoElement ||
+      !Number.isFinite(videoElement.duration) ||
+      videoElement.duration <= 0
+    ) {
+      return;
+    }
+
+    onProgress((videoElement.currentTime / videoElement.duration) * 100);
+  }, [onProgress]);
+  const handleStart = useCallback(() => {
+    onStart();
+  }, [onStart]);
+  const handleVideoEnded = useCallback(() => {
+    onProgress(100);
+    onPlayingChange(false);
+  }, [onPlayingChange, onProgress]);
+
   return (
-    <div className="lesson-media-shell lesson-console-content" data-lesson-type={lessonType}>
+    <div
+      className={cn(
+        "lesson-media-shell lesson-console-content",
+        hasVideoSource ? "lesson-media-shell--video" : "",
+      )}
+      data-lesson-type={lessonType}
+    >
       <div className="lesson-secure-frame">
         <span className="lesson-secure-frame__grid" aria-hidden="true" />
         <span className="lesson-secure-frame__sweep" aria-hidden="true" />
@@ -724,75 +828,102 @@ function VideoPlaceholder({
           <LessonTypeBadge
             type={lessonType}
             prominent
-            protectedLabel={hasMediaMetadata ? MEDIA_PROTECTION_LABEL : "Protected Media | Metadata Pending"}
+            protectedLabel={
+              hasVideoSource
+                ? "Lesson Video"
+                : hasMediaMetadata
+                  ? MEDIA_PROTECTION_LABEL
+                  : "Protected Media | Metadata Pending"
+            }
             className="lesson-secure-frame__badge"
           />
           <span className="lesson-secure-frame__status">
             <span aria-hidden="true" />
-            {hasMediaMetadata ? "Protected session ready" : "Awaiting backend media"}
+            {hasVideoSource
+              ? "Ready"
+              : hasMediaMetadata
+                ? "Protected session ready"
+                : "Awaiting backend media"}
           </span>
         </div>
 
-        <div className="lesson-secure-frame__center">
-          <PlayVideoIcon className="h-12 w-12" />
-          <div>
-            <h2 className="font-display text-2xl font-semibold text-white">
-              {hasMediaMetadata ? "Protected media session" : "Media metadata pending"}
-            </h2>
-            <p className="mt-3 max-w-xl text-sm leading-7 text-foreground/62">
-              {hasMediaMetadata
-                ? `${mediaLabel}. Watch progress records through the student progress endpoint without exposing media URLs or raw media paths.`
-                : "The backend has not attached protected media metadata for this lesson yet."}
-            </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              {[
-                "Protected video session",
-                "Watermarked playback",
-                "Signed access required",
-              ].map((label) => (
-                <span
-                  key={label}
-                  className="border border-primary/24 bg-primary/10 px-3 py-1 font-label text-[0.58rem] uppercase text-primary/82"
-                >
-                  {label}
-                </span>
-              ))}
-              {metadataSources.length ? (
-                <span className="border border-tertiary/24 bg-tertiary/10 px-3 py-1 font-label text-[0.58rem] uppercase text-tertiary/82">
-                  Metadata received
-                </span>
-              ) : null}
+        {videoSource ? (
+          <div className="lesson-secure-frame__video">
+            <video
+              ref={videoRef}
+              controls
+              controlsList="nodownload"
+              preload="metadata"
+              poster={videoSource.poster}
+              playsInline
+              aria-label={videoSource.title ?? "Lesson video"}
+              className="lesson-video-player"
+              onLoadedMetadata={reportVideoProgress}
+              onTimeUpdate={reportVideoProgress}
+              onPlay={() => onPlayingChange(true)}
+              onPause={() => onPlayingChange(false)}
+              onEnded={handleVideoEnded}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              <source src={videoSource.src} type={videoSource.contentType ?? "video/mp4"} />
+            </video>
+          </div>
+        ) : (
+          <div className="lesson-secure-frame__center">
+            <PlayVideoIcon className="h-12 w-12" />
+            <div>
+              <h2 className="font-display text-2xl font-semibold text-white">
+                {hasMediaMetadata ? "Protected media session" : "Media metadata pending"}
+              </h2>
+              <p className="mt-3 max-w-xl text-sm leading-7 text-foreground/62">
+                {hasMediaMetadata
+                  ? `${mediaLabel}. Watch progress records through the student progress endpoint without exposing media URLs or raw media paths.`
+                  : "The backend has not attached protected media metadata for this lesson yet."}
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {[
+                  "Protected video session",
+                  "Watermarked playback",
+                  "Signed access required",
+                ].map((label) => (
+                  <span
+                    key={label}
+                    className="border border-primary/24 bg-primary/10 px-3 py-1 font-label text-[0.58rem] uppercase text-primary/82"
+                  >
+                    {label}
+                  </span>
+                ))}
+                {metadataSources.length ? (
+                  <span className="border border-tertiary/24 bg-tertiary/10 px-3 py-1 font-label text-[0.58rem] uppercase text-tertiary/82">
+                    Metadata received
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="lesson-secure-frame__controls">
-          <button
-            type="button"
-            onClick={onStart}
-            disabled={!hasMediaMetadata || isWatching || progressPercent >= 100}
-            className="lesson-play-trigger"
-          >
-            <PlayVideoIcon className="h-4 w-4" />
-            <span>
-              {!hasMediaMetadata
-                ? "Await Metadata"
-                : progressPercent >= thresholdPercent
-                ? "Threshold Recorded"
-                : isWatching
-                  ? "Watching"
-                  : "Start Protected Session"}
-            </span>
-          </button>
-          <div className="min-w-0 flex-1">
-            <div className="mb-2 flex items-center justify-between gap-3 font-label text-[0.64rem] uppercase text-foreground/48">
-              <span>Watch Progress</span>
-              <span className="text-primary/86"><AnimatedNumber value={progressPercent} suffix="%" /></span>
-            </div>
-            <SignalProgressBar value={progressPercent} variant={lessonType === "HYBRID" ? "purple" : "cyan"} />
+        {!hasVideoSource ? (
+          <div className="lesson-secure-frame__controls">
+            <button
+              type="button"
+              onClick={handleStart}
+              disabled={!hasMediaMetadata || isWatching || progressPercent >= 100}
+              className="lesson-play-trigger"
+            >
+              <PlayVideoIcon className="h-4 w-4" />
+              <span>
+                {!hasMediaMetadata
+                  ? "Await Metadata"
+                  : progressPercent >= thresholdPercent
+                    ? "Video Complete"
+                    : isWatching
+                      ? "Playing"
+                      : "Start Video"}
+              </span>
+            </button>
           </div>
-          <span className="lesson-threshold-chip">Unlock {thresholdPercent}%</span>
-        </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1075,6 +1206,7 @@ function UnlockedLessonPanel({
     normalizeMeasuredProgress(initialProgress),
   );
   const lessonMode = getLessonMode(lesson);
+  const lessonVideoSource = useMemo(() => getLessonVideoSource(lesson), [lesson]);
   const mediaMetadataSources = getLessonMediaMetadataSources(lesson);
   const hasMediaMetadata = mediaMetadataSources.length > 0;
   const protectedMediaLabel = getProtectedMediaLabel(lesson);
@@ -1107,9 +1239,6 @@ function UnlockedLessonPanel({
       videoProgressPercent,
     ],
   );
-  const readingProgressPercent = requiresText
-    ? Math.min(100, Math.round((readingSeconds / TEXT_READING_SECONDS) * 100))
-    : 100;
   const readingTimeSatisfied = !requiresText || readingSeconds >= TEXT_READING_SECONDS;
   const readingComplete = !requiresText || (readingTimeSatisfied && textScrolledToBottom);
   const watchThresholdSatisfied =
@@ -1161,10 +1290,10 @@ function UnlockedLessonPanel({
       contentMode: lesson?.contentMode,
       type: lesson?.type,
       normalizedMode: lessonMode,
-      hasVideo: hasMediaMetadata,
+      hasVideo: Boolean(lessonVideoSource) || hasMediaMetadata,
       hasText,
     });
-  }, [hasMediaMetadata, hasText, lesson?.contentMode, lesson?.type, lessonMode]);
+  }, [hasMediaMetadata, hasText, lesson?.contentMode, lesson?.type, lessonMode, lessonVideoSource]);
 
   const handleTextScroll = useCallback(() => {
     const element = articleRef.current;
@@ -1193,6 +1322,14 @@ function UnlockedLessonPanel({
   const startVideoSimulation = useCallback(() => {
     setIsWatchingVideo(true);
   }, []);
+  const handleVideoProgress = useCallback((nextProgress: number) => {
+    setVideoProgressPercent((currentProgress) =>
+      Math.max(currentProgress, clampLessonProgressPercent(nextProgress)),
+    );
+  }, []);
+  const handleVideoPlayingChange = useCallback((isPlaying: boolean) => {
+    setIsWatchingVideo(isPlaying);
+  }, []);
 
   const handleQuizPassed = useCallback(async () => {
     setQuizPassOverrideLessonId(lesson.id);
@@ -1205,7 +1342,7 @@ function UnlockedLessonPanel({
     }
 
     setIsVerifyingCompletion(true);
-    setCompletionMessage("Recording backend progress...");
+    setCompletionMessage("Saving completion...");
 
     const progress = getMeasuredProgress();
     const result = await markLessonComplete(lesson.id, {
@@ -1219,11 +1356,11 @@ function UnlockedLessonPanel({
     });
 
     if (result.completed) {
-      setCompletionMessage("Lesson completion recorded by the backend.");
+      setCompletionMessage("Lesson completion saved.");
     } else if (result.reason === "REQUIREMENTS_UNMET") {
-      setCompletionMessage(`Still required: ${result.missingRequirements.join(", ")}`);
+      setCompletionMessage("Finish the video, lesson text, and quiz before completing.");
     } else {
-      setCompletionMessage(result.message ?? "Completion was not confirmed by the backend.");
+      setCompletionMessage(result.message ?? "Completion could not be saved. Please try again.");
     }
 
     setIsVerifyingCompletion(false);
@@ -1255,7 +1392,7 @@ function UnlockedLessonPanel({
   }, [isComplete, readingTimeSatisfied, requiresText]);
 
   useEffect(() => {
-    if (!requiresVideo || !isWatchingVideo || videoProgressPercent >= 100) {
+    if (lessonVideoSource || !requiresVideo || !isWatchingVideo || videoProgressPercent >= 100) {
       return;
     }
 
@@ -1272,7 +1409,7 @@ function UnlockedLessonPanel({
     }, 700);
 
     return () => window.clearInterval(timerId);
-  }, [isWatchingVideo, requiresVideo, videoProgressPercent]);
+  }, [isWatchingVideo, lessonVideoSource, requiresVideo, videoProgressPercent]);
 
   useEffect(() => {
     if (!requiresText) {
@@ -1338,10 +1475,13 @@ function UnlockedLessonPanel({
             hasMediaMetadata={hasMediaMetadata}
             mediaLabel={protectedMediaLabel}
             metadataSources={mediaMetadataSources}
+            videoSource={lessonVideoSource}
             progressPercent={videoProgressPercent}
             thresholdPercent={VIDEO_WATCH_THRESHOLD}
             isWatching={isWatchingVideo}
             onStart={startVideoSimulation}
+            onProgress={handleVideoProgress}
+            onPlayingChange={handleVideoPlayingChange}
           />
         ) : null}
 
@@ -1358,7 +1498,6 @@ function UnlockedLessonPanel({
                   Lesson Overview
                 </h2>
               </div>
-              <span className="lesson-scroll-readout">{scrollProgressPercent}% scanned</span>
             </div>
             <div className="lesson-article-panel__body mt-6">
               {displayArticleContent.length ? displayArticleContent.map((paragraph) => (
@@ -1386,85 +1525,16 @@ function UnlockedLessonPanel({
         className="lesson-control-center"
       >
         <div className="relative z-10 space-y-6">
-          <div>
-            <p className="lesson-panel-kicker">Lesson Progress</p>
-            <div className="mt-4 space-y-4">
-              {requiresVideo ? (
-                  <div>
-                    <div className="lesson-meter-label">
-                      <span>Watch Progress</span>
-                      <span><AnimatedNumber value={videoProgressPercent} suffix="%" /></span>
-                    </div>
-                  <SignalProgressBar value={videoProgressPercent} variant={lessonMode === "HYBRID" ? "purple" : "cyan"} />
-                </div>
-              ) : null}
-
-              {requiresText ? (
-                <>
-                  <div>
-                    <div className="lesson-meter-label">
-                      <span>Reading Time</span>
-                      <span><AnimatedNumber value={readingProgressPercent} suffix="%" /></span>
-                    </div>
-                    <SignalProgressBar value={readingProgressPercent} variant="green" />
-                  </div>
-                  <div>
-                    <div className="lesson-meter-label">
-                      <span>Scroll Progress</span>
-                      <span><AnimatedNumber value={scrollProgressPercent} suffix="%" /></span>
-                    </div>
-                    <SignalProgressBar value={scrollProgressPercent} variant="cyan" />
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="lesson-requirement-list">
-            {completionRequirements.map((requirement) => (
-              <span
-                key={requirement.key}
-                className={cn(
-                  "lesson-requirement-chip",
-                  requirement.met ? "lesson-requirement-chip--met" : "lesson-requirement-chip--pending",
-                )}
-              >
-                {requirement.met ? <CheckIcon className="h-3.5 w-3.5" /> : <LockIcon className="h-3.5 w-3.5" />}
-                <span>{requirement.label}</span>
-                <span>{requirement.detail}</span>
-              </span>
-            ))}
-          </div>
-
           <PrimaryButton
             type="button"
             tone={requirementsMet || isComplete ? "cyan" : "pink"}
             loading={isVerifyingCompletion}
             disabled={!canMarkComplete}
             onClick={handleCompleteLesson}
-            title={
-              unmetRequirements.length
-                ? `Unmet: ${unmetRequirements.map((requirement) => requirement.label).join(", ")}`
-                : undefined
-            }
             className={cn("lesson-complete-trigger", requirementsMet ? "lesson-complete-trigger--ready" : "")}
           >
-            {isComplete
-              ? "Lesson Complete"
-              : unmetRequirements.length
-                ? "Requirements Unmet"
-                : "Mark Lesson Complete"}
+            {isComplete ? "Lesson Complete" : "Complete Lesson"}
           </PrimaryButton>
-
-          {unmetRequirements.length ? (
-            <p className="lesson-unmet-note">
-              Unmet: {unmetRequirements.map((requirement) => requirement.label).join(", ")}
-            </p>
-          ) : (
-            <p className="lesson-ready-note">
-              Requirements met. Backend progress can be recorded.
-            </p>
-          )}
 
           {completionMessage ? (
             <p className="lesson-verification-message">
@@ -1479,13 +1549,6 @@ function UnlockedLessonPanel({
             currentProgressPercent={currentProgressPercent}
             lessonExcerpt={displayArticleContent.join("\n\n")}
           />
-
-          <div className="lesson-backend-note">
-            <ShieldLockIcon className="h-5 w-5" />
-            <span>
-              Lesson progress is recorded through the student backend.
-            </span>
-          </div>
 
           <div className="grid gap-3">
             {nextHref && !isNextLocked ? (
