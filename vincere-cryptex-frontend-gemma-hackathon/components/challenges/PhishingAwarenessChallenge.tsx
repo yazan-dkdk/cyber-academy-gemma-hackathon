@@ -25,7 +25,7 @@ const correctSenderDomainFlag = "vincere-cryptex-support.co";
 const challengeSlug = "phishing-awareness";
 const challengeApiPath = `/api/student/challenges/${challengeSlug}`;
 const lessonHref = "/courses/network-defense-foundations/lessons/ndf-firewall-rules";
-const nextRecommendedHref = "/courses/network-defense-foundations/lessons/ndf-injection-testing";
+const nextRecommendedHref = "/courses/network-defense-foundations/lessons/ndf-service-review";
 const localSafeHint =
   "Compare the display name with the sender domain, then review urgency, link destination, and attachment behavior.";
 const challengeRewardXp = 100;
