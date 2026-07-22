@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/cn";
 import { courseVisualPresets } from "@/lib/courses/catalog-data";
 import { getCourseImagePath } from "@/lib/courses/course-images";
+import { throwCourseServiceUnavailable } from "@/lib/courses/service-unavailable";
 import type { Course, CourseDifficulty, CourseLesson, CourseSection, LessonType } from "@/lib/courses/types";
 import {
   findLessonReference,
@@ -618,6 +619,7 @@ export function CourseDetailPanel({ course }: CourseDetailPanelProps) {
     errorMessage: studentCourseErrorMessage,
     isLoading: studentCourseLoading,
     refresh: refreshStudentCourse,
+    serviceError: studentCourseServiceError,
   } = useStudentCourse(course.id, course, showStudentControls);
   const activeCourse = showStudentControls ? studentCourse : course;
   const activeCourseRouteId = getCourseRouteId(activeCourse);
@@ -696,6 +698,10 @@ export function CourseDetailPanel({ course }: CourseDetailPanelProps) {
   const [openSectionIds, setOpenSectionIds] = useState<string[]>(() =>
     getStoredOpenSections(activeCourse.id, fallbackOpenSectionIds),
   );
+
+  if (studentCourseServiceError && process.env.NODE_ENV !== "development") {
+    throwCourseServiceUnavailable(studentCourseServiceError);
+  }
 
   function toggleSection(sectionId: string) {
     setOpenSectionIds((currentIds) => {

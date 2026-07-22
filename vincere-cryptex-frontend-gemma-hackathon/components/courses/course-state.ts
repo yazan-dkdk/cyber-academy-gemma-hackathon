@@ -13,6 +13,13 @@ import {
   StudentApiError,
 } from "@/lib/student-api-client";
 import { logCourseBackendFallback } from "@/lib/courses/fallback-logging";
+import {
+  CourseServiceUnavailableError,
+  createCourseServiceUnavailableState,
+  isCourseServiceUnavailableError,
+  type CourseServiceOperation,
+  type CourseServiceUnavailableState,
+} from "@/lib/courses/service-unavailable";
 import type {
   Course,
   CourseDifficulty,
@@ -1265,6 +1272,36 @@ function getErrorMessage(error: unknown, fallbackMessage: string) {
   }
 
   return fallbackMessage;
+}
+
+function canUseDevelopmentFallback() {
+  return process.env.NODE_ENV === "development";
+}
+
+function isStudentCourseServiceUnavailable(error: unknown) {
+  if (isCourseServiceUnavailableError(error)) {
+    return true;
+  }
+
+  if (error instanceof StudentApiError) {
+    return error.status === 0 || error.status >= 500;
+  }
+
+  return true;
+}
+
+function getCourseServiceUnavailableState(
+  error: unknown,
+  operation: CourseServiceOperation,
+  message: string,
+): CourseServiceUnavailableState | null {
+  if (isCourseServiceUnavailableError(error)) {
+    return error.state;
+  }
+
+  return isStudentCourseServiceUnavailable(error)
+    ? createCourseServiceUnavailableState(operation, message)
+    : null;
 }
 
 function getProgressErrorMessage(error: unknown) {
@@ -3060,6 +3097,7 @@ export function mergeStudentCourseSummaries(
 
 export function useStudentCourses(enabled: boolean, publicCourses: CourseSummary[]) {
   const [reloadKey, setReloadKey] = useState(0);
+  const [serviceError, setServiceError] = useState<CourseServiceUnavailableState | null>(null);
   const progressVersion = useStudentProgressVersion(enabled);
   const [state, setState] = useState<AsyncState<CourseSummary[]>>({
     data: [],
@@ -3085,6 +3123,7 @@ export function useStudentCourses(enabled: boolean, publicCourses: CourseSummary
         const normalizedCourses = mergeStudentCourseSummaries(publicCourses, payload);
 
         rememberStudentCourseSummaries(normalizedCourses);
+        setServiceError(null);
 
         setState({
           data: normalizedCourses,
@@ -3098,9 +3137,16 @@ export function useStudentCourses(enabled: boolean, publicCourses: CourseSummary
         }
 
         logCourseBackendFallback("/courses", "student_courses_fetch_failed");
+        setServiceError(
+          getCourseServiceUnavailableState(
+            error,
+            "student-courses",
+            "Student courses are temporarily unavailable.",
+          ),
+        );
 
         setState({
-          data: publicCourses,
+          data: canUseDevelopmentFallback() ? publicCourses : [],
           isLoading: false,
           errorMessage: getErrorMessage(error, "Unable to load student courses."),
         });
@@ -3117,6 +3163,7 @@ export function useStudentCourses(enabled: boolean, publicCourses: CourseSummary
     courses: enabled ? syncedCourses : publicCourses,
     isLoading: enabled ? state.isLoading : false,
     errorMessage: enabled ? state.errorMessage : null,
+    serviceError: enabled ? serviceError : null,
     reload: () => setReloadKey((currentKey) => currentKey + 1),
   };
 }
@@ -3152,8 +3199,25 @@ async function loadStudentCourseShell(fallbackCourse: Course) {
   try {
     const coursePayload = await fetchStudentCourse(apiCourseId);
     return normalizeCourseDetail(coursePayload, fallbackCourse);
-  } catch {
+  } catch (error) {
     logCourseBackendFallback(`/courses/${apiCourseId}`, "student_course_shell_fetch_failed");
+
+    if (!canUseDevelopmentFallback()) {
+      if (isCourseServiceUnavailableError(error)) {
+        throw error;
+      }
+
+      if (isStudentCourseServiceUnavailable(error)) {
+        throw new CourseServiceUnavailableError(
+          "student-course",
+          "Student course data is temporarily unavailable.",
+          { cause: error },
+        );
+      }
+
+      throw error;
+    }
+
     return fallbackCourse;
   }
 }
@@ -3205,6 +3269,19 @@ async function fetchNormalizedStudentLesson(
       `/courses/${apiCourseId}/lessons/${lessonId}`,
       "student_lesson_fetch_failed",
     );
+
+    if (!canUseDevelopmentFallback() && isStudentCourseServiceUnavailable(lessonError)) {
+      if (isCourseServiceUnavailableError(lessonError)) {
+        throw lessonError;
+      }
+
+      throw new CourseServiceUnavailableError(
+        "student-lesson",
+        "Student lesson data is temporarily unavailable.",
+        { cause: lessonError },
+      );
+    }
+
     const courseWithProgress = await loadStudentCourseShell(fallbackCourse);
     const status = lessonError instanceof StudentApiError ? lessonError.status : 0;
     const deniedReason =
@@ -3233,6 +3310,7 @@ export function useStudentCourse(
 ) {
   const mountedRef = useRef(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [serviceError, setServiceError] = useState<CourseServiceUnavailableState | null>(null);
   const progressVersion = useStudentProgressVersion(enabled);
   const [state, setState] = useState<AsyncState<Course>>({
     data: fallbackCourse,
@@ -3269,6 +3347,7 @@ export function useStudentCourse(
       rememberStudentCourseDetailSource(refreshedCourse);
 
       if (mountedRef.current) {
+        setServiceError(null);
         setState({
           data: refreshedCourse,
           isLoading: false,
@@ -3281,6 +3360,13 @@ export function useStudentCourse(
       logCourseBackendFallback(`/courses/${getCourseRouteId(fallbackCourse)}`, "student_course_fetch_failed");
 
       if (mountedRef.current) {
+        setServiceError(
+          getCourseServiceUnavailableState(
+            error,
+            "student-course",
+            "Student course data is temporarily unavailable.",
+          ),
+        );
         setState((currentState) => ({
           data: currentState.data,
           isLoading: false,
@@ -3306,6 +3392,7 @@ export function useStudentCourse(
         }
 
         rememberStudentCourseDetailSource(refreshedCourse);
+        setServiceError(null);
 
         setState({
           data: refreshedCourse,
@@ -3319,6 +3406,13 @@ export function useStudentCourse(
         }
 
         logCourseBackendFallback(`/courses/${getCourseRouteId(fallbackCourse)}`, "student_course_fetch_failed");
+        setServiceError(
+          getCourseServiceUnavailableState(
+            error,
+            "student-course",
+            "Student course data is temporarily unavailable.",
+          ),
+        );
 
         setState((currentState) => ({
           data: currentState.data,
@@ -3338,6 +3432,7 @@ export function useStudentCourse(
     course: enabled ? syncedCourse : fallbackCourse,
     isLoading: enabled ? state.isLoading : false,
     errorMessage: enabled ? state.errorMessage : null,
+    serviceError: enabled ? serviceError : null,
     reload: () => setReloadKey((currentKey) => currentKey + 1),
     refresh,
   };
@@ -3351,6 +3446,7 @@ export function useStudentLesson(
 ) {
   const mountedRef = useRef(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [serviceError, setServiceError] = useState<CourseServiceUnavailableState | null>(null);
   const progressVersion = useStudentProgressVersion(enabled);
   const [state, setState] = useState<StudentLessonAsyncState>({
     data: fallbackCourse,
@@ -3405,6 +3501,7 @@ export function useStudentLesson(
       rememberStudentCourseDetailSource(result.course, true);
 
       if (mountedRef.current) {
+        setServiceError(null);
         setState({
           data: result.course,
           access: result.access,
@@ -3430,6 +3527,13 @@ export function useStudentLesson(
       const errorMessage = getErrorMessage(error, "Unable to load this lesson from the backend.");
 
       if (mountedRef.current) {
+        setServiceError(
+          getCourseServiceUnavailableState(
+            error,
+            "student-lesson",
+            "Student lesson data is temporarily unavailable.",
+          ),
+        );
         setState((currentState) => ({
           data: currentState.data,
           access: currentState.access.canAccess
@@ -3441,6 +3545,10 @@ export function useStudentLesson(
           isLoading: false,
           errorMessage,
         }));
+      }
+
+      if (!canUseDevelopmentFallback() && isCourseServiceUnavailableError(error)) {
+        throw error;
       }
 
       return {
@@ -3465,6 +3573,7 @@ export function useStudentLesson(
         }
 
         rememberStudentCourseDetailSource(result.course);
+        setServiceError(null);
 
         setState({
           data: result.course,
@@ -3483,6 +3592,13 @@ export function useStudentLesson(
           "student_lesson_fetch_failed",
         );
         const errorMessage = getErrorMessage(error, "Unable to load this lesson from the backend.");
+        setServiceError(
+          getCourseServiceUnavailableState(
+            error,
+            "student-lesson",
+            "Student lesson data is temporarily unavailable.",
+          ),
+        );
 
         setState((currentState) => ({
           data: currentState.data,
@@ -3508,6 +3624,7 @@ export function useStudentLesson(
     course: enabled ? syncedCourse : fallbackCourse,
     isLoading: enabled ? state.isLoading : false,
     errorMessage: enabled ? state.errorMessage : null,
+    serviceError: enabled ? serviceError : null,
     lessonAccess: enabled
       ? state.access
       : buildLessonAccessState(fallbackCourse, lessonId, {
@@ -3612,6 +3729,7 @@ function deriveContinueLearningItemsFromCourses(courses: CourseSummary[]): Conti
 
 export function useStudentContinueLearning(enabled: boolean, courses: CourseSummary[]) {
   const [reloadKey, setReloadKey] = useState(0);
+  const [serviceError, setServiceError] = useState<CourseServiceUnavailableState | null>(null);
   const progressVersion = useStudentProgressVersion(enabled);
   const coursesRef = useRef(courses);
   const [state, setState] = useState<AsyncState<ContinueLearningItem[]>>({
@@ -3640,6 +3758,7 @@ export function useStudentContinueLearning(enabled: boolean, courses: CourseSumm
         const normalizedItems = normalizeContinueLearningItems(payload, coursesRef.current);
 
         rememberStudentCourseSummaries(normalizedItems, false);
+        setServiceError(null);
 
         setState({
           data: normalizedItems,
@@ -3652,6 +3771,13 @@ export function useStudentContinueLearning(enabled: boolean, courses: CourseSumm
           return;
         }
 
+        setServiceError(
+          getCourseServiceUnavailableState(
+            error,
+            "student-continue-learning",
+            "Continue learning data is temporarily unavailable.",
+          ),
+        );
         setState((currentState) => ({
           data: currentState.data,
           isLoading: false,
@@ -3668,11 +3794,17 @@ export function useStudentContinueLearning(enabled: boolean, courses: CourseSumm
     .map(applyRememberedContinueLearningItem)
     .filter((item) => buildCourseProgress(item.id, item.lessonIds, item).isEnrolled);
   const courseDerivedItems = deriveContinueLearningItemsFromCourses(courses);
+  const items = serviceError && !canUseDevelopmentFallback()
+    ? []
+    : syncedItems.length
+      ? syncedItems
+      : courseDerivedItems;
 
   return {
-    items: enabled ? (syncedItems.length ? syncedItems : courseDerivedItems) : [],
+    items: enabled ? items : [],
     isLoading: enabled ? state.isLoading : false,
     errorMessage: enabled ? state.errorMessage : null,
+    serviceError: enabled ? serviceError : null,
     reload: () => setReloadKey((currentKey) => currentKey + 1),
   };
 }
@@ -4159,6 +4291,7 @@ export function normalizeStudentDashboardSummary(
 
 export function useStudentDashboard(enabled: boolean, publicCourses: CourseSummary[]) {
   const [reloadKey, setReloadKey] = useState(0);
+  const [serviceError, setServiceError] = useState<CourseServiceUnavailableState | null>(null);
   const progressVersion = useStudentProgressVersion(enabled);
   const [state, setState] = useState<AsyncState<StudentDashboardSummary | null>>({
     data: null,
@@ -4179,6 +4312,7 @@ export function useStudentDashboard(enabled: boolean, publicCourses: CourseSumma
           return;
         }
 
+        setServiceError(null);
         setState({
           data: normalizeStudentDashboardSummary(payload, publicCourses),
           isLoading: false,
@@ -4190,6 +4324,13 @@ export function useStudentDashboard(enabled: boolean, publicCourses: CourseSumma
           return;
         }
 
+        setServiceError(
+          getCourseServiceUnavailableState(
+            error,
+            "student-dashboard",
+            "Student dashboard data is temporarily unavailable.",
+          ),
+        );
         setState((currentState) => ({
           data: currentState.data,
           isLoading: false,
@@ -4206,6 +4347,7 @@ export function useStudentDashboard(enabled: boolean, publicCourses: CourseSumma
     dashboard: enabled ? state.data : null,
     isLoading: enabled ? state.isLoading : false,
     errorMessage: enabled ? state.errorMessage : null,
+    serviceError: enabled ? serviceError : null,
     reload: () => setReloadKey((currentKey) => currentKey + 1),
   };
 }

@@ -34,6 +34,7 @@ import {
 import { cn } from "@/lib/cn";
 import { isStudentUser } from "@/lib/auth-roles";
 import { getCourseRouteId } from "@/lib/courses/routing";
+import { throwCourseServiceUnavailable } from "@/lib/courses/service-unavailable";
 import {
   fetchStudentQuiz,
   startStudentQuizAttempt,
@@ -1700,6 +1701,7 @@ function StudentLessonPagePanel({ course, lessonId }: LessonPagePanelProps) {
     isLoading: lessonLoading,
     lessonAccess,
     refresh: refreshStudentLesson,
+    serviceError: studentLessonServiceError,
   } = useStudentLesson(course.id, lessonId, course, true);
   const [isEnrollingFromGate, setIsEnrollingFromGate] = useState(false);
   const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
@@ -1844,6 +1846,10 @@ function StudentLessonPagePanel({ course, lessonId }: LessonPagePanelProps) {
     lessonAccess.status,
     lessonId,
   ]);
+
+  if (studentLessonServiceError && process.env.NODE_ENV !== "development") {
+    throwCourseServiceUnavailable(studentLessonServiceError);
+  }
 
   async function handleEnrollFromLessonGate() {
     setEnrollmentError(null);

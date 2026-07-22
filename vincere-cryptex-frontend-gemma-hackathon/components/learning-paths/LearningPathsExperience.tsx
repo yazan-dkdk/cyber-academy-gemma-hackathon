@@ -23,6 +23,7 @@ import { cn } from "@/lib/cn";
 import { mockCourses } from "@/lib/courses/mock-data";
 import { toCourseSummary } from "@/lib/courses/mock-api";
 import { getCourseRouteId, normalizeCourseRouteId } from "@/lib/courses/routing";
+import { throwCourseServiceUnavailable } from "@/lib/courses/service-unavailable";
 import type { CourseSummary } from "@/lib/courses/types";
 
 type PathTone = "blue" | "red" | "purple" | "neutral";
@@ -281,15 +282,19 @@ function buildStudentRoadmap(courses: CourseSummary[]): StudentRoadmapStep[] {
     ? mockCourses.find(
         (course) => normalizeCourseRouteId(course.slug ?? course.id) === normalizeCourseRouteId(activeCourse.id),
       ) ?? null
-    : mockCourses.find((course) => course.id === "network-defense-foundations") ?? mockCourses[0] ?? null;
+    : process.env.NODE_ENV === "development"
+      ? mockCourses.find((course) => course.id === "network-defense-foundations") ?? mockCourses[0] ?? null
+      : null;
   const lessonReferences = publicCourse ? publicCourse.sections.flatMap((section) => section.lessons).slice(0, 5) : [];
   const progress = activeCourse ? getCourseProgress(activeCourse) : null;
 
   if (!lessonReferences.length) {
-    return studentRoadmap.map((step, index) => ({
-      ...step,
-      status: index === 0 ? ("Next" as const) : ("Locked" as const),
-    }));
+    return process.env.NODE_ENV === "development"
+      ? studentRoadmap.map((step, index) => ({
+          ...step,
+          status: index === 0 ? ("Next" as const) : ("Locked" as const),
+        }))
+      : [];
   }
 
   return lessonReferences.map((lesson, index) => {
@@ -1129,10 +1134,15 @@ export function LearningPathsExperience() {
     courses,
     errorMessage,
     isLoading: coursesLoading,
+    serviceError,
   } = useStudentCourses(isStudent, publicCourses);
 
   if (status === "loading") {
     return <LearningPathsLoadingView />;
+  }
+
+  if (isStudent && serviceError && process.env.NODE_ENV !== "development") {
+    throwCourseServiceUnavailable(serviceError);
   }
 
   return isStudent ? (

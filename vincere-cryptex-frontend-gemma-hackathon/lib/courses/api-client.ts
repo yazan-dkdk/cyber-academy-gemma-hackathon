@@ -2,6 +2,10 @@ import { logCourseBackendFallback } from "@/lib/courses/fallback-logging";
 import { applyCourseLessonVideoOverrides } from "@/lib/courses/local-lesson-video-overrides";
 import { getMockCourseById, getMockCourseCatalog } from "@/lib/courses/mock-api";
 import { normalizeCourseRouteId } from "@/lib/courses/routing";
+import {
+  CourseServiceUnavailableError,
+  isCourseServiceUnavailableError,
+} from "@/lib/courses/service-unavailable";
 import type {
   Course,
   CourseDifficulty,
@@ -20,6 +24,20 @@ const FRONTEND_DEV_ORIGINS = new Set([
 ]);
 
 type BackendRecord = Record<string, unknown>;
+
+class BackendCourseRequestError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`Backend course request failed with ${status}.`);
+    this.name = "BackendCourseRequestError";
+    this.status = status;
+  }
+}
+
+function canUseDevelopmentFallback() {
+  return process.env.NODE_ENV === "development";
+}
 
 function isRecord(value: unknown): value is BackendRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -131,7 +149,7 @@ async function fetchBackendJson(path = "") {
     });
 
     if (!response.ok) {
-      throw new Error(`Backend course request failed with ${response.status}.`);
+      throw new BackendCourseRequestError(response.status);
     }
 
     return response.json() as Promise<unknown>;
@@ -193,7 +211,7 @@ function extractCourseArray(payload: unknown) {
   }
 
   if (!isRecord(payload)) {
-    return [];
+    return null;
   }
 
   for (const key of ["courses", "items", "data", "results"]) {
@@ -210,7 +228,7 @@ function extractCourseArray(payload: unknown) {
     return extractCourseArray(nestedData);
   }
 
-  return [];
+  return null;
 }
 
 function getRouteIdFromCourseRecord(record: BackendRecord) {
@@ -421,6 +439,13 @@ async function enrichBackendCatalogWithDetails(courses: CourseSummary[]) {
         const detail = normalizeBackendCourseDetail(payload);
 
         if (!detail) {
+          if (!canUseDevelopmentFallback()) {
+            throw new CourseServiceUnavailableError(
+              "catalog-detail",
+              "Course catalog details are temporarily unavailable.",
+            );
+          }
+
           return course;
         }
 
@@ -434,7 +459,19 @@ async function enrichBackendCatalogWithDetails(courses: CourseSummary[]) {
           lessonTypes: getLessonTypes(sections),
           lessonIds: getLessonIds(sections),
         };
-      } catch {
+      } catch (error) {
+        if (!canUseDevelopmentFallback()) {
+          if (isCourseServiceUnavailableError(error)) {
+            throw error;
+          }
+
+          throw new CourseServiceUnavailableError(
+            "catalog-detail",
+            "Course catalog details are temporarily unavailable.",
+            { cause: error },
+          );
+        }
+
         return course;
       }
     }),
@@ -446,19 +483,59 @@ async function enrichBackendCatalogWithDetails(courses: CourseSummary[]) {
 export async function fetchCourseCatalog(route = "/courses") {
   try {
     const payload = await fetchBackendJson();
-    const backendCourses = extractCourseArray(payload)
+    const courseRecords = extractCourseArray(payload);
+
+    if (!courseRecords) {
+      logCourseBackendFallback(route, "backend_catalog_payload_missing");
+
+      if (canUseDevelopmentFallback()) {
+        return getMockCourseCatalog();
+      }
+
+      throw new CourseServiceUnavailableError(
+        "catalog",
+        "The course catalog response was not usable.",
+      );
+    }
+
+    const backendCourses = courseRecords
       .map(normalizeBackendCourseSummary)
       .filter((course): course is CourseSummary => Boolean(course));
 
     if (!backendCourses.length) {
       logCourseBackendFallback(route, "backend_empty_catalog");
-      return getMockCourseCatalog();
+
+      if (canUseDevelopmentFallback()) {
+        return getMockCourseCatalog();
+      }
+
+      if (courseRecords.length) {
+        throw new CourseServiceUnavailableError(
+          "catalog",
+          "The course catalog response did not contain usable courses.",
+        );
+      }
+
+      return [];
     }
 
     return enrichBackendCatalogWithDetails(backendCourses);
-  } catch {
+  } catch (error) {
+    if (isCourseServiceUnavailableError(error)) {
+      throw error;
+    }
+
     logCourseBackendFallback(route, "backend_fetch_failed");
-    return getMockCourseCatalog();
+
+    if (canUseDevelopmentFallback()) {
+      return getMockCourseCatalog();
+    }
+
+    throw new CourseServiceUnavailableError(
+      "catalog",
+      "The course catalog is temporarily unavailable.",
+      { cause: error },
+    );
   }
 }
 
@@ -469,13 +546,38 @@ export async function fetchCourse(id: string, route = `/courses/${id}`) {
 
     if (!backendCourse) {
       logCourseBackendFallback(route, "backend_course_payload_missing");
-      return getMockCourseById(id);
+
+      if (canUseDevelopmentFallback()) {
+        return getMockCourseById(id);
+      }
+
+      throw new CourseServiceUnavailableError(
+        "course-detail",
+        "The course response was not usable.",
+      );
     }
 
     return backendCourse;
-  } catch {
+  } catch (error) {
+    if (isCourseServiceUnavailableError(error)) {
+      throw error;
+    }
+
     logCourseBackendFallback(route, "backend_fetch_failed");
-    return getMockCourseById(id);
+
+    if (canUseDevelopmentFallback()) {
+      return getMockCourseById(id);
+    }
+
+    if (error instanceof BackendCourseRequestError && error.status === 404) {
+      return null;
+    }
+
+    throw new CourseServiceUnavailableError(
+      "course-detail",
+      "Course details are temporarily unavailable.",
+      { cause: error },
+    );
   }
 }
 

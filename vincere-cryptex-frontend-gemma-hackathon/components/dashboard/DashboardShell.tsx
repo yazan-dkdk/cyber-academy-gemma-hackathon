@@ -24,6 +24,7 @@ import { toCourseSummary } from "@/lib/courses/mock-api";
 import { getOrderedLessonReferences } from "@/lib/courses/structure";
 import { getCourseImagePath } from "@/lib/courses/course-images";
 import { getCourseRouteId, normalizeCourseRouteId } from "@/lib/courses/routing";
+import { throwCourseServiceUnavailable } from "@/lib/courses/service-unavailable";
 import {
   buildCourseProgress,
   getSafeEnrollmentLessonHref,
@@ -153,7 +154,11 @@ function buildSkillMatrix(courses: CourseSummary[]) {
 }
 
 function buildRoadmapItems(course: CourseSummary | ContinueLearningItem | null) {
-  const publicCourse = course ? getPublicCourseById(course.id) : mockCourses[0] ?? null;
+  const publicCourse = course
+    ? getPublicCourseById(course.id)
+    : process.env.NODE_ENV === "development"
+      ? mockCourses[0] ?? null
+      : null;
   const lessonReferences = publicCourse ? getOrderedLessonReferences(publicCourse).slice(0, 5) : [];
   const progress = course ? buildCourseProgress(course.id, course.lessonIds, course) : null;
   const currentLessonId = progress?.currentLessonId ?? progress?.nextLessonId ?? lessonReferences[0]?.lesson.id ?? null;
@@ -229,11 +234,13 @@ export function DashboardShell() {
     dashboard,
     errorMessage: dashboardErrorMessage,
     isLoading: dashboardLoading,
+    serviceError: dashboardServiceError,
   } = useStudentDashboard(isStudent, publicCourses);
   const {
     courses,
     errorMessage: coursesErrorMessage,
     isLoading: coursesLoading,
+    serviceError: coursesServiceError,
   } = useStudentCourses(isStudent, publicCourses);
   const dashboardCourseItems = dashboard?.enrolledCourseItems.length
     ? dashboard.enrolledCourseItems
@@ -242,12 +249,18 @@ export function DashboardShell() {
     items: continueLearningItems,
     errorMessage: continueLearningErrorMessage,
     isLoading: continueLearningLoading,
+    serviceError: continueLearningServiceError,
   } = useStudentContinueLearning(isStudent, dashboardCourseItems);
   const {
     activity: fallbackActivity,
     errorMessage: fallbackActivityErrorMessage,
     isLoading: fallbackActivityLoading,
-  } = useStudentActivity(isStudent && !dashboard && Boolean(dashboardErrorMessage));
+  } = useStudentActivity(
+    process.env.NODE_ENV === "development" &&
+      isStudent &&
+      !dashboard &&
+      Boolean(dashboardErrorMessage),
+  );
   const activity = dashboard?.activity ?? fallbackActivity;
   const activityErrorMessage = dashboardErrorMessage ?? fallbackActivityErrorMessage;
   const activityLoading = dashboardLoading || fallbackActivityLoading;
@@ -437,6 +450,13 @@ export function DashboardShell() {
         </GlowCard>
       </section>
     );
+  }
+
+  const serviceError =
+    dashboardServiceError ?? coursesServiceError ?? continueLearningServiceError;
+
+  if (serviceError && process.env.NODE_ENV !== "development") {
+    throwCourseServiceUnavailable(serviceError);
   }
 
   return (

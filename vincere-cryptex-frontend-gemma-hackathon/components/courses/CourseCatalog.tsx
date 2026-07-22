@@ -14,6 +14,7 @@ import { LearningPathCard } from "@/components/courses/LearningPathCard";
 import { learningPaths, recommendedCourses } from "@/lib/courses/catalog-data";
 import { useStudentContinueLearning, useStudentCourses } from "@/components/courses/course-state";
 import { isStudentUser } from "@/lib/auth-roles";
+import { throwCourseServiceUnavailable } from "@/lib/courses/service-unavailable";
 import type { CourseSummary } from "@/lib/courses/types";
 import { cn } from "@/lib/cn";
 
@@ -109,12 +110,14 @@ export function CourseCatalog({ courses }: CourseCatalogProps) {
     courses: studentCourses,
     errorMessage: coursesErrorMessage,
     isLoading: coursesLoading,
+    serviceError: coursesServiceError,
   } = useStudentCourses(showStudentControls, courses);
   const displayCourses = showStudentControls ? studentCourses : courses;
   const {
     items: continueLearningCourses,
     errorMessage: continueLearningErrorMessage,
     isLoading: continueLearningLoading,
+    serviceError: continueLearningServiceError,
   } = useStudentContinueLearning(showStudentControls, displayCourses);
   const [filters, setFilters] = useState<CatalogFilters>({
     query: "",
@@ -155,6 +158,12 @@ export function CourseCatalog({ courses }: CourseCatalogProps) {
         ),
     [displayCourses],
   );
+
+  const serviceError = coursesServiceError ?? continueLearningServiceError;
+
+  if (serviceError && process.env.NODE_ENV !== "development") {
+    throwCourseServiceUnavailable(serviceError);
+  }
 
   function updateLevel(level: CatalogLevelFilter) {
     setFilters((currentFilters) => ({
