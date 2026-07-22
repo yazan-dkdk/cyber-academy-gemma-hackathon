@@ -10,6 +10,22 @@ const REQUIRED_ENVIRONMENT_VARIABLES = [
   'LAB_PROXY_BASE_URL',
 ] as const;
 
+const EXAMPLE_SECRET_VALUES = new Set([
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+]);
+
+const PLACEHOLDER_VALUE_TOKENS = new Set([
+  'changeme',
+  'demo',
+  'dummy',
+  'example',
+  'fake',
+  'placeholder',
+  'replace',
+  'sample',
+  'your',
+]);
+
 const parseBoolean = (value: unknown, fallback = false): boolean => {
   if (value === undefined || value === null || value === '') {
     return fallback;
@@ -71,12 +87,145 @@ const trimOptional = (value: unknown): string => {
 
 const normalizeUrl = (value: string) => value.replace(/\/+$/, '');
 
-const assertUrl = (value: string, fieldName: string) => {
+const parseUrl = (value: string, fieldName: string): URL => {
   try {
-    // eslint-disable-next-line no-new
-    new URL(value);
+    return new URL(value);
   } catch {
     throw new Error(`${fieldName} must be a valid URL`);
+  }
+};
+
+const assertUrl = (value: string, fieldName: string) => {
+  parseUrl(value, fieldName);
+};
+
+const isLoopbackHostname = (hostname: string): boolean => {
+  const normalized = hostname.toLowerCase().replace(/^\[(.*)\]$/, '$1');
+
+  return (
+    normalized === 'localhost' ||
+    normalized.endsWith('.localhost') ||
+    normalized === '0.0.0.0' ||
+    normalized === '::' ||
+    normalized === '::1' ||
+    /^127(?:\.\d{1,3}){3}$/.test(normalized)
+  );
+};
+
+const assertProductionOrigin = (value: string, fieldName: string): URL => {
+  if (value !== value.trim()) {
+    throw new Error(`${fieldName} must not contain leading or trailing whitespace`);
+  }
+
+  const parsed = parseUrl(value, fieldName);
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error(`${fieldName} must use https:// in production`);
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new Error(`${fieldName} must not contain credentials`);
+  }
+
+  if (parsed.pathname !== '/' || parsed.search || parsed.hash) {
+    throw new Error(`${fieldName} must be an origin without a path, query, or fragment`);
+  }
+
+  if (isLoopbackHostname(parsed.hostname)) {
+    throw new Error(`${fieldName} must not use a loopback host in production`);
+  }
+
+  return parsed;
+};
+
+const assertHttpBaseUrl = (value: string, fieldName: string) => {
+  if (value !== value.trim()) {
+    throw new Error(`${fieldName} must not contain leading or trailing whitespace`);
+  }
+
+  const parsed = parseUrl(value, fieldName);
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`${fieldName} must use the http:// or https:// protocol`);
+  }
+
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error(`${fieldName} must not contain credentials, a query, or a fragment`);
+  }
+};
+
+const isPlaceholderValue = (value: string): boolean => {
+  const normalized = value.trim().toLowerCase();
+
+  if (EXAMPLE_SECRET_VALUES.has(normalized)) {
+    return true;
+  }
+
+  const tokens = normalized.split(/[^a-z0-9]+/).filter(Boolean);
+  const collapsed = tokens.join('');
+
+  return (
+    tokens.some((token) => PLACEHOLDER_VALUE_TOKENS.has(token)) ||
+    /^(?:dev)?(?:demo|dummy|example|fake|placeholder|sample)/.test(collapsed) ||
+    collapsed.includes('changeme') ||
+    collapsed.includes('replaceme')
+  );
+};
+
+const assertProductionSecret = (
+  value: unknown,
+  fieldName: string,
+  minimumLength?: number,
+): string => {
+  const secret = trimOptional(value);
+
+  if (!secret) {
+    throw new Error(`${fieldName} is required in production`);
+  }
+
+  if (isPlaceholderValue(secret)) {
+    throw new Error(`${fieldName} must not use an example, demo, or placeholder secret`);
+  }
+
+  if (minimumLength !== undefined && secret.length < minimumLength) {
+    throw new Error(`${fieldName} must be at least ${minimumLength} characters in production`);
+  }
+
+  return secret;
+};
+
+const assertNotPlaceholderValue = (value: string, fieldName: string) => {
+  if (isPlaceholderValue(value)) {
+    throw new Error(`${fieldName} must not use an example, demo, or placeholder value`);
+  }
+};
+
+const assertCookieDomain = (value: string, origins: URL[]) => {
+  if (!value) {
+    return;
+  }
+
+  const domain = value.replace(/^\./, '').toLowerCase();
+  const domainLabels = domain.split('.');
+  const isValidDomain =
+    domain.length <= 253 &&
+    domainLabels.every(
+      (label) =>
+        label.length > 0 &&
+        label.length <= 63 &&
+        /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+    );
+
+  if (!isValidDomain || /^\d+(?:\.\d+){3}$/.test(domain) || isLoopbackHostname(domain)) {
+    throw new Error('COOKIE_DOMAIN must be a valid non-loopback domain in production');
+  }
+
+  const matchesEveryOrigin = origins.every(
+    (origin) => origin.hostname === domain || origin.hostname.endsWith(`.${domain}`),
+  );
+
+  if (!matchesEveryOrigin) {
+    throw new Error('COOKIE_DOMAIN must match both backend and frontend origins');
   }
 };
 
@@ -89,10 +238,38 @@ const assertPostgresUrl = (value: string, fieldName: string) => {
 };
 
 const assertRedisUrl = (value: string, fieldName: string) => {
-  assertUrl(value, fieldName);
-  const parsed = new URL(value);
+  if (value !== value.trim()) {
+    throw new Error(`${fieldName} must not contain leading or trailing whitespace`);
+  }
+
+  const parsed = parseUrl(value, fieldName);
   if (parsed.protocol !== 'redis:' && parsed.protocol !== 'rediss:') {
     throw new Error(`${fieldName} must use the redis:// or rediss:// protocol`);
+  }
+
+  if (!parsed.hostname) {
+    throw new Error(`${fieldName} must include a hostname`);
+  }
+
+  if (parsed.search || parsed.hash) {
+    throw new Error(`${fieldName} must not contain a query or fragment`);
+  }
+
+  const databaseNumber = parsed.pathname.replace(/^\//, '');
+  if (databaseNumber && !/^\d+$/.test(databaseNumber)) {
+    throw new Error(`${fieldName} database path must be a non-negative integer`);
+  }
+
+  if (parsed.password) {
+    let password: string;
+
+    try {
+      password = decodeURIComponent(parsed.password);
+    } catch {
+      throw new Error(`${fieldName} contains invalid password encoding`);
+    }
+
+    assertProductionSecret(password, `${fieldName} password`);
   }
 };
 
@@ -192,6 +369,9 @@ export const validateEnvironment = (
   const databaseUrl = String(config.DATABASE_URL);
   const redisUrl = String(config.REDIS_URL);
   const sessionSecret = String(config.SESSION_SECRET);
+  const sessionCookieName = String(config.SESSION_COOKIE_NAME);
+  const cookieSecure = parseBoolean(config.COOKIE_SECURE, isProduction);
+  const cookieDomain = trimOptional(config.COOKIE_DOMAIN);
   const emailProvider = parseEmailProvider(config.EMAIL_PROVIDER);
   const resendApiKey = trimOptional(config.RESEND_API_KEY);
   const explicitMailFrom = trimOptional(config.MAIL_FROM);
@@ -199,6 +379,18 @@ export const validateEnvironment = (
   const mailPort = parseOptionalInteger(config.MAIL_PORT, 'MAIL_PORT');
   const mailUser = trimOptional(config.MAIL_USER);
   const mailPass = String(config.MAIL_PASS ?? '');
+  const gemmaProvider = String(config.GEMMA_PROVIDER ?? 'mock') || 'mock';
+  const gemmaApiKey = String(config.GEMMA_API_KEY ?? '');
+  const gemmaModel = String(config.GEMMA_MODEL ?? '');
+  const ollamaEnabled = parseBoolean(config.OLLAMA_ENABLED, true);
+  const ollamaBaseUrl = String(config.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434');
+  const ollamaModel = String(config.OLLAMA_MODEL ?? 'gemma-local');
+  const ollamaTimeoutMs = parseInteger(config.OLLAMA_TIMEOUT_MS, 'OLLAMA_TIMEOUT_MS', 60000);
+  const geminiEnabled = parseBoolean(
+    config.GEMINI_ENABLED,
+    gemmaProvider.trim().toLowerCase() === 'google',
+  );
+  const aiProviderPriority = String(config.AI_PROVIDER_PRIORITY ?? 'local-first');
 
   assertUrl(appBaseUrl, 'APP_BASE_URL');
   assertUrl(frontendOrigin, 'FRONTEND_ORIGIN');
@@ -213,32 +405,151 @@ export const validateEnvironment = (
       throw new Error('FRONTEND_ORIGIN is required in production');
     }
 
+    const backendOrigin = assertProductionOrigin(appBaseUrl, 'APP_BASE_URL');
+    const allowedFrontendOrigin = assertProductionOrigin(frontendOrigin, 'FRONTEND_ORIGIN');
+    const publicFrontendOrigin = assertProductionOrigin(frontendUrl, 'FRONTEND_URL');
+
+    if (allowedFrontendOrigin.origin !== publicFrontendOrigin.origin) {
+      throw new Error('FRONTEND_URL and FRONTEND_ORIGIN must use the same origin');
+    }
+
     assertPostgresUrl(databaseUrl, 'DATABASE_URL');
     assertRedisUrl(redisUrl, 'REDIS_URL');
 
-    if (sessionSecret.length < 32) {
-      throw new Error('SESSION_SECRET must be at least 32 characters in production');
+    assertProductionSecret(sessionSecret, 'SESSION_SECRET', 32);
+    assertProductionSecret(mfaEncryptionKey, 'MFA_ENCRYPTION_KEY');
+    assertProductionSecret(config.LAB_ORCHESTRATOR_API_KEY, 'LAB_ORCHESTRATOR_API_KEY', 32);
+
+    if (
+      config.COOKIE_SECURE === undefined ||
+      config.COOKIE_SECURE === null ||
+      config.COOKIE_SECURE === ''
+    ) {
+      throw new Error('COOKIE_SECURE must be explicitly set to true in production');
     }
+
+    if (!cookieSecure) {
+      throw new Error('COOKIE_SECURE must be true in production');
+    }
+
+    if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(sessionCookieName)) {
+      throw new Error('SESSION_COOKIE_NAME must be a valid cookie name');
+    }
+
+    assertCookieDomain(cookieDomain, [backendOrigin, allowedFrontendOrigin]);
 
     if (!explicitMailFrom) {
       throw new Error('MAIL_FROM is required in production');
+    }
+
+    if (!trimOptional(config.EMAIL_PROVIDER)) {
+      throw new Error('EMAIL_PROVIDER is required in production');
     }
 
     if (emailProvider === 'resend' && !resendApiKey) {
       throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend');
     }
 
+    if (emailProvider === 'resend') {
+      assertProductionSecret(resendApiKey, 'RESEND_API_KEY', 20);
+    }
+
     if (
       emailProvider === 'smtp' &&
-      (!mailHost || !mailPort || mailPort <= 0 || !mailUser || !mailPass)
+      (!mailHost || !mailPort || mailPort <= 0 || !mailUser || !trimOptional(mailPass))
     ) {
       throw new Error(
         'MAIL_HOST, MAIL_PORT, MAIL_USER, and MAIL_PASS are required when EMAIL_PROVIDER=smtp in production',
       );
     }
-  }
 
-  const gemmaProvider = String(config.GEMMA_PROVIDER ?? 'mock') || 'mock';
+    if (emailProvider === 'smtp') {
+      assertProductionSecret(mailPass, 'MAIL_PASS');
+    }
+
+    if (!trimOptional(config.GEMMA_PROVIDER)) {
+      throw new Error('GEMMA_PROVIDER is required in production');
+    }
+
+    if (
+      config.OLLAMA_ENABLED === undefined ||
+      config.OLLAMA_ENABLED === null ||
+      config.OLLAMA_ENABLED === ''
+    ) {
+      throw new Error('OLLAMA_ENABLED must be explicitly configured in production');
+    }
+
+    if (
+      config.GEMINI_ENABLED === undefined ||
+      config.GEMINI_ENABLED === null ||
+      config.GEMINI_ENABLED === ''
+    ) {
+      throw new Error('GEMINI_ENABLED must be explicitly configured in production');
+    }
+
+    if (!trimOptional(config.AI_PROVIDER_PRIORITY)) {
+      throw new Error('AI_PROVIDER_PRIORITY is required in production');
+    }
+
+    const normalizedGemmaProvider = gemmaProvider.trim().toLowerCase();
+    const normalizedProviderPriority = aiProviderPriority.trim().toLowerCase();
+
+    if (normalizedGemmaProvider !== 'ollama' && normalizedGemmaProvider !== 'google') {
+      throw new Error('GEMMA_PROVIDER must be either "ollama" or "google" in production');
+    }
+
+    if (normalizedProviderPriority !== 'local-first') {
+      throw new Error('AI_PROVIDER_PRIORITY must be "local-first"');
+    }
+
+    if (!ollamaEnabled && !geminiEnabled) {
+      throw new Error('At least one AI provider must be enabled in production');
+    }
+
+    if (normalizedGemmaProvider === 'ollama' && !ollamaEnabled) {
+      throw new Error('OLLAMA_ENABLED must be true when GEMMA_PROVIDER=ollama');
+    }
+
+    if (normalizedGemmaProvider === 'google' && !geminiEnabled) {
+      throw new Error('GEMINI_ENABLED must be true when GEMMA_PROVIDER=google');
+    }
+
+    if (ollamaEnabled) {
+      if (!trimOptional(config.OLLAMA_BASE_URL)) {
+        throw new Error('OLLAMA_BASE_URL is required when Ollama is enabled in production');
+      }
+
+      if (!trimOptional(config.OLLAMA_MODEL)) {
+        throw new Error('OLLAMA_MODEL is required when Ollama is enabled in production');
+      }
+
+      if (
+        config.OLLAMA_TIMEOUT_MS === undefined ||
+        config.OLLAMA_TIMEOUT_MS === null ||
+        config.OLLAMA_TIMEOUT_MS === ''
+      ) {
+        throw new Error('OLLAMA_TIMEOUT_MS is required when Ollama is enabled in production');
+      }
+
+      assertHttpBaseUrl(ollamaBaseUrl, 'OLLAMA_BASE_URL');
+      assertNotPlaceholderValue(ollamaModel, 'OLLAMA_MODEL');
+
+      if (ollamaTimeoutMs <= 0) {
+        throw new Error('OLLAMA_TIMEOUT_MS must be greater than zero');
+      }
+    }
+
+    if (geminiEnabled) {
+      assertProductionSecret(gemmaApiKey, 'GEMMA_API_KEY', 20);
+
+      const configuredGemmaModel = trimOptional(gemmaModel);
+      if (!configuredGemmaModel) {
+        throw new Error('GEMMA_MODEL is required when Gemini is enabled in production');
+      }
+
+      assertNotPlaceholderValue(configuredGemmaModel, 'GEMMA_MODEL');
+    }
+  }
 
   return {
     NODE_ENV: nodeEnv,
@@ -250,9 +561,9 @@ export const validateEnvironment = (
     DATABASE_URL: databaseUrl,
     REDIS_URL: redisUrl,
     SESSION_SECRET: sessionSecret,
-    SESSION_COOKIE_NAME: String(config.SESSION_COOKIE_NAME),
-    COOKIE_SECURE: parseBoolean(config.COOKIE_SECURE, isProduction),
-    COOKIE_DOMAIN: trimOptional(config.COOKIE_DOMAIN) || null,
+    SESSION_COOKIE_NAME: sessionCookieName,
+    COOKIE_SECURE: cookieSecure,
+    COOKIE_DOMAIN: cookieDomain || null,
     SESSION_TTL_SECONDS: parseInteger(config.SESSION_TTL_SECONDS, 'SESSION_TTL_SECONDS', 604800),
     SESSION_IDLE_TTL_SECONDS: parseInteger(
       config.SESSION_IDLE_TTL_SECONDS,
@@ -395,16 +706,13 @@ export const validateEnvironment = (
     ),
     LAB_PROXY_BASE_URL: String(config.LAB_PROXY_BASE_URL),
     GEMMA_PROVIDER: gemmaProvider,
-    GEMMA_API_KEY: String(config.GEMMA_API_KEY ?? ''),
-    GEMMA_MODEL: String(config.GEMMA_MODEL ?? ''),
-    OLLAMA_ENABLED: parseBoolean(config.OLLAMA_ENABLED, true),
-    OLLAMA_BASE_URL: String(config.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434'),
-    OLLAMA_MODEL: String(config.OLLAMA_MODEL ?? 'gemma-local'),
-    OLLAMA_TIMEOUT_MS: parseInteger(config.OLLAMA_TIMEOUT_MS, 'OLLAMA_TIMEOUT_MS', 60000),
-    GEMINI_ENABLED: parseBoolean(
-      config.GEMINI_ENABLED,
-      gemmaProvider.trim().toLowerCase() === 'google',
-    ),
-    AI_PROVIDER_PRIORITY: String(config.AI_PROVIDER_PRIORITY ?? 'local-first'),
+    GEMMA_API_KEY: gemmaApiKey,
+    GEMMA_MODEL: gemmaModel,
+    OLLAMA_ENABLED: ollamaEnabled,
+    OLLAMA_BASE_URL: ollamaBaseUrl,
+    OLLAMA_MODEL: ollamaModel,
+    OLLAMA_TIMEOUT_MS: ollamaTimeoutMs,
+    GEMINI_ENABLED: geminiEnabled,
+    AI_PROVIDER_PRIORITY: aiProviderPriority,
   };
 };
