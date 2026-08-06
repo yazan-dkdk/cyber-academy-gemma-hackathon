@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuthSession } from "@/components/auth/AuthSessionProvider";
 import { AiTutorPanel } from "@/components/ai-tutor/AiTutorPanel";
 import { LessonTypeBadge } from "@/components/courses/LessonTypeBadge";
+import { ServiceUnavailable } from "@/components/courses/ServiceUnavailable";
 import {
   buildCourseProgress,
   type CourseProgressLessonInput,
@@ -34,7 +35,6 @@ import {
 import { cn } from "@/lib/cn";
 import { isStudentUser } from "@/lib/auth-roles";
 import { getCourseRouteId } from "@/lib/courses/routing";
-import { throwCourseServiceUnavailable } from "@/lib/courses/service-unavailable";
 import {
   fetchStudentQuiz,
   startStudentQuizAttempt,
@@ -1700,6 +1700,7 @@ function StudentLessonPagePanel({ course, lessonId }: LessonPagePanelProps) {
     errorMessage: lessonErrorMessage,
     isLoading: lessonLoading,
     lessonAccess,
+    reload: reloadStudentLesson,
     refresh: refreshStudentLesson,
     serviceError: studentLessonServiceError,
   } = useStudentLesson(course.id, lessonId, course, true);
@@ -1847,8 +1848,13 @@ function StudentLessonPagePanel({ course, lessonId }: LessonPagePanelProps) {
     lessonId,
   ]);
 
-  if (studentLessonServiceError && process.env.NODE_ENV !== "development") {
-    throwCourseServiceUnavailable(studentLessonServiceError);
+  if (studentLessonServiceError) {
+    return (
+      <ServiceUnavailable
+        serviceError={studentLessonServiceError}
+        onRetry={reloadStudentLesson}
+      />
+    );
   }
 
   async function handleEnrollFromLessonGate() {

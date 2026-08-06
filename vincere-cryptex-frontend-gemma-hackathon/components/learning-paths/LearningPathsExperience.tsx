@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { useMemo, type ReactNode } from "react";
 import { useAuthSession } from "@/components/auth/AuthSessionProvider";
+import { ServiceUnavailable } from "@/components/courses/ServiceUnavailable";
 import {
   buildCourseProgress,
   getSafeEnrollmentLessonHref,
@@ -23,7 +24,6 @@ import { cn } from "@/lib/cn";
 import { mockCourses } from "@/lib/courses/mock-data";
 import { toCourseSummary } from "@/lib/courses/mock-api";
 import { getCourseRouteId, normalizeCourseRouteId } from "@/lib/courses/routing";
-import { throwCourseServiceUnavailable } from "@/lib/courses/service-unavailable";
 import type { CourseSummary } from "@/lib/courses/types";
 
 type PathTone = "blue" | "red" | "purple" | "neutral";
@@ -1134,6 +1134,7 @@ export function LearningPathsExperience() {
     courses,
     errorMessage,
     isLoading: coursesLoading,
+    reload: reloadCourses,
     serviceError,
   } = useStudentCourses(isStudent, publicCourses);
 
@@ -1141,8 +1142,8 @@ export function LearningPathsExperience() {
     return <LearningPathsLoadingView />;
   }
 
-  if (isStudent && serviceError && process.env.NODE_ENV !== "development") {
-    throwCourseServiceUnavailable(serviceError);
+  if (isStudent && serviceError) {
+    return <ServiceUnavailable serviceError={serviceError} onRetry={reloadCourses} />;
   }
 
   return isStudent ? (

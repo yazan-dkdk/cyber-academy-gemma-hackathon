@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { startTransition, useEffect, useMemo } from "react";
 import { useAuthSession } from "@/components/auth/AuthSessionProvider";
+import { ServiceUnavailable } from "@/components/courses/ServiceUnavailable";
 import { AiTutorCore3D } from "@/components/dashboard/AiTutorCore3D";
 import { DashboardThreeScene } from "@/components/dashboard/DashboardThreeScene";
 import { GlowCard } from "@/components/ui/GlowCard";
@@ -24,7 +25,6 @@ import { toCourseSummary } from "@/lib/courses/mock-api";
 import { getOrderedLessonReferences } from "@/lib/courses/structure";
 import { getCourseImagePath } from "@/lib/courses/course-images";
 import { getCourseRouteId, normalizeCourseRouteId } from "@/lib/courses/routing";
-import { throwCourseServiceUnavailable } from "@/lib/courses/service-unavailable";
 import {
   buildCourseProgress,
   getSafeEnrollmentLessonHref,
@@ -234,12 +234,14 @@ export function DashboardShell() {
     dashboard,
     errorMessage: dashboardErrorMessage,
     isLoading: dashboardLoading,
+    reload: reloadDashboard,
     serviceError: dashboardServiceError,
   } = useStudentDashboard(isStudent, publicCourses);
   const {
     courses,
     errorMessage: coursesErrorMessage,
     isLoading: coursesLoading,
+    reload: reloadCourses,
     serviceError: coursesServiceError,
   } = useStudentCourses(isStudent, publicCourses);
   const dashboardCourseItems = dashboard?.enrolledCourseItems.length
@@ -249,6 +251,7 @@ export function DashboardShell() {
     items: continueLearningItems,
     errorMessage: continueLearningErrorMessage,
     isLoading: continueLearningLoading,
+    reload: reloadContinueLearning,
     serviceError: continueLearningServiceError,
   } = useStudentContinueLearning(isStudent, dashboardCourseItems);
   const {
@@ -455,8 +458,17 @@ export function DashboardShell() {
   const serviceError =
     dashboardServiceError ?? coursesServiceError ?? continueLearningServiceError;
 
-  if (serviceError && process.env.NODE_ENV !== "development") {
-    throwCourseServiceUnavailable(serviceError);
+  if (serviceError) {
+    return (
+      <ServiceUnavailable
+        serviceError={serviceError}
+        onRetry={() => {
+          reloadDashboard();
+          reloadCourses();
+          reloadContinueLearning();
+        }}
+      />
+    );
   }
 
   return (

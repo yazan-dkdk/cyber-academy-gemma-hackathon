@@ -11,10 +11,10 @@ import {
 import { ContinueLearningCard } from "@/components/courses/ContinueLearningCard";
 import { CourseCard } from "@/components/courses/CourseCard";
 import { LearningPathCard } from "@/components/courses/LearningPathCard";
+import { ServiceUnavailable } from "@/components/courses/ServiceUnavailable";
 import { learningPaths, recommendedCourses } from "@/lib/courses/catalog-data";
 import { useStudentContinueLearning, useStudentCourses } from "@/components/courses/course-state";
 import { isStudentUser } from "@/lib/auth-roles";
-import { throwCourseServiceUnavailable } from "@/lib/courses/service-unavailable";
 import type { CourseSummary } from "@/lib/courses/types";
 import { cn } from "@/lib/cn";
 
@@ -110,6 +110,7 @@ export function CourseCatalog({ courses }: CourseCatalogProps) {
     courses: studentCourses,
     errorMessage: coursesErrorMessage,
     isLoading: coursesLoading,
+    reload: reloadCourses,
     serviceError: coursesServiceError,
   } = useStudentCourses(showStudentControls, courses);
   const displayCourses = showStudentControls ? studentCourses : courses;
@@ -117,6 +118,7 @@ export function CourseCatalog({ courses }: CourseCatalogProps) {
     items: continueLearningCourses,
     errorMessage: continueLearningErrorMessage,
     isLoading: continueLearningLoading,
+    reload: reloadContinueLearning,
     serviceError: continueLearningServiceError,
   } = useStudentContinueLearning(showStudentControls, displayCourses);
   const [filters, setFilters] = useState<CatalogFilters>({
@@ -161,8 +163,16 @@ export function CourseCatalog({ courses }: CourseCatalogProps) {
 
   const serviceError = coursesServiceError ?? continueLearningServiceError;
 
-  if (serviceError && process.env.NODE_ENV !== "development") {
-    throwCourseServiceUnavailable(serviceError);
+  if (serviceError) {
+    return (
+      <ServiceUnavailable
+        serviceError={serviceError}
+        onRetry={() => {
+          reloadCourses();
+          reloadContinueLearning();
+        }}
+      />
+    );
   }
 
   function updateLevel(level: CatalogLevelFilter) {

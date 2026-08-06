@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuthSession } from "@/components/auth/AuthSessionProvider";
 import { CourseVisual } from "@/components/courses/CourseVisual";
 import { LessonTypeBadge } from "@/components/courses/LessonTypeBadge";
+import { ServiceUnavailable } from "@/components/courses/ServiceUnavailable";
 import {
   enrollmentNoLessonRouteMessage,
   type CourseProgressLessonInput,
@@ -30,7 +31,6 @@ import {
 import { cn } from "@/lib/cn";
 import { courseVisualPresets } from "@/lib/courses/catalog-data";
 import { getCourseImagePath } from "@/lib/courses/course-images";
-import { throwCourseServiceUnavailable } from "@/lib/courses/service-unavailable";
 import type { Course, CourseDifficulty, CourseLesson, CourseSection, LessonType } from "@/lib/courses/types";
 import {
   findLessonReference,
@@ -618,6 +618,7 @@ export function CourseDetailPanel({ course }: CourseDetailPanelProps) {
     course: studentCourse,
     errorMessage: studentCourseErrorMessage,
     isLoading: studentCourseLoading,
+    reload: reloadStudentCourse,
     refresh: refreshStudentCourse,
     serviceError: studentCourseServiceError,
   } = useStudentCourse(course.id, course, showStudentControls);
@@ -699,8 +700,13 @@ export function CourseDetailPanel({ course }: CourseDetailPanelProps) {
     getStoredOpenSections(activeCourse.id, fallbackOpenSectionIds),
   );
 
-  if (studentCourseServiceError && process.env.NODE_ENV !== "development") {
-    throwCourseServiceUnavailable(studentCourseServiceError);
+  if (studentCourseServiceError) {
+    return (
+      <ServiceUnavailable
+        serviceError={studentCourseServiceError}
+        onRetry={reloadStudentCourse}
+      />
+    );
   }
 
   function toggleSection(sectionId: string) {
