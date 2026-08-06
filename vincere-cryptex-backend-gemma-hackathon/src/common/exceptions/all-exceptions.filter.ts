@@ -20,6 +20,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const { statusCode, body } = this.resolveError(exception);
 
+    if (statusCode === HttpStatus.TOO_MANY_REQUESTS) {
+      const retryAfterSeconds = Number(body.retryAfterSeconds);
+      if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+        reply.header('Retry-After', String(Math.ceil(retryAfterSeconds)));
+      }
+    }
+
     if (statusCode >= 500) {
       this.logger.error(
         `${request.method} ${request.url} failed`,

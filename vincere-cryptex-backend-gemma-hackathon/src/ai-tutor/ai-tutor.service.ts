@@ -1,6 +1,10 @@
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 
 import { AppConfigService } from '../config/app-config.service';
+import {
+  AdmitAiTutorProviderExecution,
+  AiTutorUsageService,
+} from './ai-tutor-usage.service';
 import { AskAiTutorDto } from './dto/ask-ai-tutor.dto';
 import { AiSafetyGuard } from './guards/ai-safety.guard';
 import { GeminiProvider } from './providers/gemini.provider';
@@ -36,38 +40,50 @@ export class AiTutorService {
     private readonly geminiProvider: GeminiProvider,
     @Inject(SafeMockProvider)
     private readonly safeMockProvider: SafeMockProvider,
+    @Inject(AiTutorUsageService)
+    private readonly usageService: AiTutorUsageService,
   ) {}
 
-  async ask(request: AskAiTutorDto): Promise<AiTutorResponse> {
-    const normalizedRequest = this.normalizeRequest(request);
-    const language = this.safetyGuard.detectLanguage(normalizedRequest.userQuestion);
-    const safety = this.safetyGuard.assess(normalizedRequest);
-    const lessonContext = this.safetyGuard.buildLessonContext(normalizedRequest);
+  async ask(request: AskAiTutorDto, userId: string): Promise<AiTutorResponse> {
+    return this.usageService.withConcurrencyProtection(
+      userId,
+      async (admitProviderExecution) => {
+        const normalizedRequest = this.normalizeRequest(request);
+        const language = this.safetyGuard.detectLanguage(normalizedRequest.userQuestion);
+        const safety = this.safetyGuard.assess(normalizedRequest);
+        const lessonContext = this.safetyGuard.buildLessonContext(normalizedRequest);
 
-    if (safety.blocked) {
-      return this.safetyGuard.buildRefusal(language);
-    }
+        if (safety.blocked) {
+          return this.safetyGuard.buildRefusal(language);
+        }
 
-    const prompt = this.safetyGuard.buildTutorPrompt(
-      normalizedRequest,
-      language,
-      lessonContext,
+        const prompt = this.safetyGuard.buildTutorPrompt(
+          normalizedRequest,
+          language,
+          lessonContext,
+        );
+
+        for (const provider of this.resolveProviders()) {
+          const answer = await this.tryProvider(
+            provider,
+            prompt,
+            userId,
+            admitProviderExecution,
+          );
+
+          if (answer !== null) {
+            return {
+              type: responseTypeForMode(request.mode),
+              answer,
+              blocked: false,
+              safetyLevel: this.safetyGuard.publicSafetyLevel(safety.safetyLevel),
+            };
+          }
+        }
+
+        return this.buildSafeFallback(normalizedRequest, safety, language, lessonContext);
+      },
     );
-
-    for (const provider of this.resolveProviders()) {
-      const answer = await this.tryProvider(provider, prompt);
-
-      if (answer !== null) {
-        return {
-          type: responseTypeForMode(request.mode),
-          answer,
-          blocked: false,
-          safetyLevel: this.safetyGuard.publicSafetyLevel(safety.safetyLevel),
-        };
-      }
-    }
-
-    return this.buildSafeFallback(normalizedRequest, safety, language, lessonContext);
   }
 
   private normalizeRequest(request: AskAiTutorDto): NormalizedAskAiTutorDto {
@@ -100,39 +116,52 @@ export class AiTutorService {
   private async tryProvider(
     provider: AiTutorTextProvider,
     prompt: string,
+    userId: string,
+    admitProviderExecution: AdmitAiTutorProviderExecution,
   ): Promise<string | null> {
     if (!provider.isEnabled()) {
       return null;
     }
 
+    const startedAt = Date.now();
     const healthy = await provider.isHealthy();
 
     if (!healthy) {
-      this.logProviderFail(provider.name, 'health');
+      this.logProviderFailure(provider.name, userId, 'health', startedAt);
       return null;
     }
 
-    this.logger.log(`[AI_PROVIDER_SELECTED] provider=${provider.name}`);
+    await admitProviderExecution();
+    this.logger.log(
+      JSON.stringify({
+        event: 'ai_tutor.provider.selected',
+        timestamp: new Date().toISOString(),
+        userId,
+        provider: provider.name,
+      }),
+    );
 
     try {
       const answer = (await provider.generateText(prompt)).trim();
 
       if (!answer) {
-        this.logProviderFail(provider.name, 'empty');
+        this.logProviderFailure(provider.name, userId, 'empty', startedAt);
         return null;
       }
 
       if (this.safetyGuard.containsUnsafeContent(answer)) {
-        this.logProviderFail(provider.name, 'post-check');
+        this.logProviderFailure(provider.name, userId, 'post-check', startedAt);
         return null;
       }
 
-      this.logProviderOk(provider.name);
+      this.logProviderSuccess(provider.name, userId, startedAt);
       return answer;
     } catch (error) {
-      this.logProviderFail(
+      this.logProviderFailure(
         provider.name,
+        userId,
         'generate',
+        startedAt,
         this.normalizeProviderFailReason(error),
       );
       return null;
@@ -145,7 +174,12 @@ export class AiTutorService {
     language: 'en' | 'ar',
     lessonContext: LessonTutorContext,
   ): AiTutorResponse {
-    this.logger.warn('[AI_SAFE_FALLBACK]');
+    this.logger.warn(
+      JSON.stringify({
+        event: 'ai_tutor.safe_fallback',
+        timestamp: new Date().toISOString(),
+      }),
+    );
 
     return this.safeMockProvider.generate({
       request,
@@ -155,13 +189,20 @@ export class AiTutorService {
     });
   }
 
-  private logProviderOk(providerName: AiTutorProviderName): void {
-    if (providerName === 'ollama') {
-      this.logger.log('[OLLAMA_PROVIDER_OK]');
-      return;
-    }
-
-    this.logger.log('[GEMINI_PROVIDER_OK]');
+  private logProviderSuccess(
+    provider: AiTutorProviderName,
+    userId: string,
+    startedAt: number,
+  ): void {
+    this.logger.log(
+      JSON.stringify({
+        event: 'ai_tutor.provider.success',
+        timestamp: new Date().toISOString(),
+        userId,
+        provider,
+        durationMs: Date.now() - startedAt,
+      }),
+    );
   }
 
   private normalizeProviderFailReason(error: unknown): string {
@@ -180,17 +221,23 @@ export class AiTutorService {
     return 'bad_response';
   }
 
-  private logProviderFail(
-    providerName: AiTutorProviderName,
+  private logProviderFailure(
+    provider: AiTutorProviderName,
+    userId: string,
     stage: string,
+    startedAt: number,
     reason?: string,
   ): void {
-    if (providerName === 'ollama') {
-      const reasonLog = reason ? ` reason=${reason}` : '';
-      this.logger.warn(`[OLLAMA_PROVIDER_FAIL] stage=${stage}${reasonLog}`);
-      return;
-    }
-
-    this.logger.warn(`[GEMINI_PROVIDER_FAIL] stage=${stage}`);
+    this.logger.warn(
+      JSON.stringify({
+        event: 'ai_tutor.provider.failure',
+        timestamp: new Date().toISOString(),
+        userId,
+        provider,
+        stage,
+        reason,
+        durationMs: Date.now() - startedAt,
+      }),
+    );
   }
 }

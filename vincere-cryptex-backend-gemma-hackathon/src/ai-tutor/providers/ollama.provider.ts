@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { AppConfigService } from '../../config/app-config.service';
+import { OLLAMA_HEALTH_TIMEOUT_MS } from '../ai-tutor.constants';
 import {
   AiTutorProviderError,
   AiTutorTextProvider,
@@ -10,7 +11,6 @@ interface OllamaGenerateResponse {
   response?: unknown;
 }
 
-const OLLAMA_HEALTH_TIMEOUT_MS = 1000;
 const HEALTH_CACHE_TTL_MS = 30000;
 
 @Injectable()
@@ -69,7 +69,7 @@ export class OllamaProvider implements AiTutorTextProvider {
       throw new AiTutorProviderError(this.name, 'bad_response');
     }
 
-    const response = await this.fetchWithTimeout(
+    const { response, responseBody } = await this.fetchTextWithTimeout(
       this.buildUrl('/api/generate'),
       {
         method: 'POST',
@@ -84,8 +84,6 @@ export class OllamaProvider implements AiTutorTextProvider {
       },
       this.configService.ollamaTimeoutMs,
     );
-
-    const responseBody = await response.text();
 
     if (!response.ok) {
       throw new AiTutorProviderError(this.name, 'bad_response');
@@ -119,6 +117,32 @@ export class OllamaProvider implements AiTutorTextProvider {
         ...init,
         signal: controller.signal,
       });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new AiTutorProviderError(this.name, 'timeout');
+      }
+
+      throw new AiTutorProviderError(this.name, 'connection');
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private async fetchTextWithTimeout(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+  ): Promise<{ response: Response; responseBody: string }> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      });
+      const responseBody = await response.text();
+      return { response, responseBody };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new AiTutorProviderError(this.name, 'timeout');

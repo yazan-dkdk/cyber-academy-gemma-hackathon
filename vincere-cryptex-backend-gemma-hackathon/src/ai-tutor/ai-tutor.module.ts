@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AiTutorController } from './ai-tutor.controller';
 import { AiTutorService } from './ai-tutor.service';
+import { AiTutorUsageService } from './ai-tutor-usage.service';
 import { AiSafetyGuard } from './guards/ai-safety.guard';
 import { GeminiProvider } from './providers/gemini.provider';
 import { OllamaProvider } from './providers/ollama.provider';
@@ -11,6 +12,7 @@ import { SafeMockProvider } from './providers/safe-mock.provider';
   controllers: [AiTutorController],
   providers: [
     AiTutorService,
+    AiTutorUsageService,
     AiSafetyGuard,
     OllamaProvider,
     GeminiProvider,

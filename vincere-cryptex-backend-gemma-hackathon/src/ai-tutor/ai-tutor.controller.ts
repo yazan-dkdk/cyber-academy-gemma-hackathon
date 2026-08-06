@@ -2,8 +2,13 @@ import { Body, Controller, ForbiddenException, Inject, Post, UseGuards } from '@
 import { UserRole, UserStatus } from '@prisma/client';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import {
+  RateLimitPreset,
+  RateLimitPresetDecorator,
+} from '../common/decorators/rate-limit.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
+import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { AiTutorService } from './ai-tutor.service';
@@ -19,9 +24,11 @@ export class AiTutorController {
   ) {}
 
   @Post('ask')
+  @UseGuards(RateLimitGuard)
+  @RateLimitPresetDecorator(RateLimitPreset.AI_TUTOR_ASK)
   async ask(@CurrentUser() user: AuthenticatedUser, @Body() body: AskAiTutorDto) {
     this.assertActiveStudent(user);
-    return this.aiTutorService.ask(body);
+    return this.aiTutorService.ask(body, user.id);
   }
 
   private assertActiveStudent(user: AuthenticatedUser) {

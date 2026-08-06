@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { AppConfigService } from '../../config/app-config.service';
+import { GEMINI_REQUEST_TIMEOUT_MS } from '../ai-tutor.constants';
 import {
   AiTutorProviderError,
   AiTutorTextProvider,
@@ -8,7 +9,6 @@ import {
 
 const GEMINI_GENERATE_CONTENT_BASE_URL =
   'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_REQUEST_TIMEOUT_MS = 30000;
 
 interface GeminiGenerateContentResponse {
   candidates?: Array<{
@@ -108,6 +108,10 @@ export class GeminiProvider implements AiTutorTextProvider {
     } catch (error) {
       if (error instanceof AiTutorProviderError) {
         throw error;
+      }
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new AiTutorProviderError(this.name, 'timeout');
       }
 
       throw new AiTutorProviderError(this.name, 'network failure');

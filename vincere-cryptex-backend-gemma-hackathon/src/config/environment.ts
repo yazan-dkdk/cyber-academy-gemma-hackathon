@@ -1,3 +1,13 @@
+import {
+  AI_TUTOR_CONCURRENCY_LOCK_DEFAULT_TTL_SECONDS,
+  AI_TUTOR_DAILY_QUOTA_DEFAULT,
+  AI_TUTOR_PROVIDER_TIMEOUT_BUFFER_SECONDS,
+  AI_TUTOR_RATE_LIMIT_DEFAULT_MAX,
+  AI_TUTOR_RATE_LIMIT_DEFAULT_WINDOW_SECONDS,
+  GEMINI_REQUEST_TIMEOUT_MS,
+  OLLAMA_HEALTH_TIMEOUT_MS,
+} from '../ai-tutor/ai-tutor.constants';
+
 const REQUIRED_ENVIRONMENT_VARIABLES = [
   'APP_BASE_URL',
   'DATABASE_URL',
@@ -68,6 +78,35 @@ const parseInteger = (value: unknown, fieldName: string, fallback?: number): num
   const parsed = Number.parseInt(String(value), 10);
   if (!Number.isInteger(parsed)) {
     throw new Error(`${fieldName} must be an integer`);
+  }
+
+  return parsed;
+};
+
+const parseBoundedInteger = (
+  value: unknown,
+  fieldName: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number => {
+  const resolved = value === undefined || value === null || value === '' ? fallback : value;
+  const normalized = typeof resolved === 'string' ? resolved.trim() : resolved;
+
+  if (
+    (typeof normalized === 'string' && !/^-?\d+$/.test(normalized)) ||
+    (typeof normalized !== 'string' && typeof normalized !== 'number')
+  ) {
+    throw new Error(`${fieldName} must be an integer`);
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`${fieldName} must be an integer`);
+  }
+
+  if (parsed < minimum || parsed > maximum) {
+    throw new Error(`${fieldName} must be between ${minimum} and ${maximum}`);
   }
 
   return parsed;
@@ -303,6 +342,10 @@ export interface EnvironmentVariables {
   FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS: number;
   RESET_PASSWORD_RATE_LIMIT_MAX: number;
   RESET_PASSWORD_RATE_LIMIT_WINDOW_SECONDS: number;
+  AI_TUTOR_RATE_LIMIT_MAX: number;
+  AI_TUTOR_RATE_LIMIT_WINDOW_SECONDS: number;
+  AI_TUTOR_DAILY_QUOTA: number;
+  AI_TUTOR_CONCURRENCY_LOCK_TTL_SECONDS: number;
   FORGOT_PASSWORD_MIN_DURATION_MS: number;
   FLAG_SUBMISSION_RATE_LIMIT_MAX: number;
   FLAG_SUBMISSION_RATE_LIMIT_WINDOW_SECONDS: number;
@@ -391,12 +434,66 @@ export const validateEnvironment = (
     gemmaProvider.trim().toLowerCase() === 'google',
   );
   const aiProviderPriority = String(config.AI_PROVIDER_PRIORITY ?? 'local-first');
+  const aiTutorRateLimitMax = parseBoundedInteger(
+    config.AI_TUTOR_RATE_LIMIT_MAX,
+    'AI_TUTOR_RATE_LIMIT_MAX',
+    AI_TUTOR_RATE_LIMIT_DEFAULT_MAX,
+    1,
+    100,
+  );
+  const aiTutorRateLimitWindowSeconds = parseBoundedInteger(
+    config.AI_TUTOR_RATE_LIMIT_WINDOW_SECONDS,
+    'AI_TUTOR_RATE_LIMIT_WINDOW_SECONDS',
+    AI_TUTOR_RATE_LIMIT_DEFAULT_WINDOW_SECONDS,
+    10,
+    3600,
+  );
+  const aiTutorDailyQuota = parseBoundedInteger(
+    config.AI_TUTOR_DAILY_QUOTA,
+    'AI_TUTOR_DAILY_QUOTA',
+    AI_TUTOR_DAILY_QUOTA_DEFAULT,
+    1,
+    1000,
+  );
+  const aiTutorConcurrencyLockTtlSeconds = parseBoundedInteger(
+    config.AI_TUTOR_CONCURRENCY_LOCK_TTL_SECONDS,
+    'AI_TUTOR_CONCURRENCY_LOCK_TTL_SECONDS',
+    AI_TUTOR_CONCURRENCY_LOCK_DEFAULT_TTL_SECONDS,
+    31,
+    600,
+  );
+  const providerFlowTimeoutMs =
+    (ollamaEnabled ? OLLAMA_HEALTH_TIMEOUT_MS + ollamaTimeoutMs : 0) +
+    (geminiEnabled ? GEMINI_REQUEST_TIMEOUT_MS : 0);
+  const minimumConcurrencyLockTtlSeconds =
+    Math.ceil(providerFlowTimeoutMs / 1000) + AI_TUTOR_PROVIDER_TIMEOUT_BUFFER_SECONDS;
+
+  if (aiTutorConcurrencyLockTtlSeconds < minimumConcurrencyLockTtlSeconds) {
+    throw new Error(
+      `AI_TUTOR_CONCURRENCY_LOCK_TTL_SECONDS must be at least ${minimumConcurrencyLockTtlSeconds} seconds for the enabled provider timeouts`,
+    );
+  }
 
   assertUrl(appBaseUrl, 'APP_BASE_URL');
   assertUrl(frontendOrigin, 'FRONTEND_ORIGIN');
   assertUrl(frontendUrl, 'FRONTEND_URL');
 
   if (isProduction) {
+    for (const variableName of [
+      'AI_TUTOR_RATE_LIMIT_MAX',
+      'AI_TUTOR_RATE_LIMIT_WINDOW_SECONDS',
+      'AI_TUTOR_DAILY_QUOTA',
+      'AI_TUTOR_CONCURRENCY_LOCK_TTL_SECONDS',
+    ] as const) {
+      if (
+        config[variableName] === undefined ||
+        config[variableName] === null ||
+        config[variableName] === ''
+      ) {
+        throw new Error(`${variableName} is required in production`);
+      }
+    }
+
     if (!config.FRONTEND_URL) {
       throw new Error('FRONTEND_URL is required in production');
     }
@@ -629,6 +726,10 @@ export const validateEnvironment = (
       'RESET_PASSWORD_RATE_LIMIT_WINDOW_SECONDS',
       900,
     ),
+    AI_TUTOR_RATE_LIMIT_MAX: aiTutorRateLimitMax,
+    AI_TUTOR_RATE_LIMIT_WINDOW_SECONDS: aiTutorRateLimitWindowSeconds,
+    AI_TUTOR_DAILY_QUOTA: aiTutorDailyQuota,
+    AI_TUTOR_CONCURRENCY_LOCK_TTL_SECONDS: aiTutorConcurrencyLockTtlSeconds,
     FORGOT_PASSWORD_MIN_DURATION_MS: parseInteger(
       config.FORGOT_PASSWORD_MIN_DURATION_MS,
       'FORGOT_PASSWORD_MIN_DURATION_MS',

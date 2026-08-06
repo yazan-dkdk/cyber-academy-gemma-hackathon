@@ -178,6 +178,25 @@ export class AppConfigService {
     return this.configService.get('AI_PROVIDER_PRIORITY', { infer: true });
   }
 
+  get aiTutorRateLimit() {
+    return {
+      max: this.configService.get('AI_TUTOR_RATE_LIMIT_MAX', { infer: true }),
+      windowSeconds: this.configService.get('AI_TUTOR_RATE_LIMIT_WINDOW_SECONDS', {
+        infer: true,
+      }),
+    };
+  }
+
+  get aiTutorDailyQuota() {
+    return this.configService.get('AI_TUTOR_DAILY_QUOTA', { infer: true });
+  }
+
+  get aiTutorConcurrencyLockTtlSeconds() {
+    return this.configService.get('AI_TUTOR_CONCURRENCY_LOCK_TTL_SECONDS', {
+      infer: true,
+    });
+  }
+
   get loginRateLimit() {
     return {
       max: this.configService.get('LOGIN_RATE_LIMIT_MAX', { infer: true }),

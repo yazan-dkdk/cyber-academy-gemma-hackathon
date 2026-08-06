@@ -40,9 +40,11 @@ export class RateLimitGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const { key, max, windowSeconds } = this.buildRateLimitContext(preset, request);
-    const authSensitive = this.isAuthSensitivePreset(preset);
+    const failClosed =
+      this.isAuthSensitivePreset(preset) ||
+      (preset === RateLimitPreset.AI_TUTOR_ASK && this.configService.isProduction);
     const { count, ttlSeconds } = await this.redisService.incrementRateLimit(key, windowSeconds, {
-      failClosed: authSensitive,
+      failClosed,
     });
 
     if (count > max) {
@@ -61,6 +63,20 @@ export class RateLimitGuard implements CanActivate {
     request: AuthenticatedRequest,
     retryAfterSeconds: number,
   ) {
+    if (preset === RateLimitPreset.AI_TUTOR_ASK) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'ai_tutor.request.rejected',
+          timestamp: new Date().toISOString(),
+          outcome: 'blocked',
+          reason: 'short_window_rate_limit',
+          userId: request.auth?.user.id,
+          retryAfterSeconds,
+        }),
+      );
+      return;
+    }
+
     this.logger.warn(
       JSON.stringify({
         event: 'auth.rate_limit.triggered',
@@ -162,6 +178,15 @@ export class RateLimitGuard implements CanActivate {
       return {
         key: `rate-limit:mfa:${userId}:${ip}`,
         max: limit.maxFailures,
+        windowSeconds: limit.windowSeconds,
+      };
+    }
+
+    if (preset === RateLimitPreset.AI_TUTOR_ASK) {
+      const limit = this.configService.aiTutorRateLimit;
+      return {
+        key: `rate-limit:ai-tutor:ask:${userId}`,
+        max: limit.max,
         windowSeconds: limit.windowSeconds,
       };
     }
