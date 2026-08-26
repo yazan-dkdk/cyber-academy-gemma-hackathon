@@ -1,0 +1,67 @@
+name: cyber-academy-pf05d-integration
+
+services:
+  postgres-integration:
+    image: postgres:16.10-alpine
+    command:
+      - postgres
+      - -c
+      - cluster_name=cyber-academy-backend-integration
+    environment:
+      POSTGRES_DB: cyber_academy_integration_test
+      POSTGRES_USER: cyber_academy_integration
+      POSTGRES_PASSWORD: integration_test_only
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - postgres-integration-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U cyber_academy_integration -d cyber_academy_integration_test
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: "no"
+    labels:
+      com.vincere-cryptex.purpose: integration-test-only
+    networks:
+      - integration
+
+  redis-integration:
+    image: redis:7.4.5-alpine
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.integration.conf
+    ports:
+      - "127.0.0.1:56379:6379"
+    volumes:
+      - ./test/integration/redis.integration.conf:/usr/local/etc/redis/redis.integration.conf:ro
+    tmpfs:
+      - /data
+    read_only: true
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - --user
+        - cyber_academy_integration
+        - --pass
+        - integration_test_only
+        - --no-auth-warning
+        - ping
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: "no"
+    labels:
+      com.vincere-cryptex.purpose: integration-test-only
+    networks:
+      - integration
+
+networks:
+  integration:
+    driver: bridge
+
+volumes:
+  postgres-integration-data:
