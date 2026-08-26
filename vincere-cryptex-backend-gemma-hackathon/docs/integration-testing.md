@@ -15,7 +15,7 @@ REDIS_URL=redis://cyber_academy_integration:integration_test_only@127.0.0.1:5637
 
 These are deliberately public, local, test-only credentials. Copy `.env.integration.example` to the ignored `.env.integration` file before running commands. Existing shell variables take precedence over the file, so an inherited development or production URL is rejected rather than overwritten. Prisma may report that it discovered the backend `.env` file, but the already-validated process URL takes precedence and the live server identity is checked before reset.
 
-Before any database reset, the guard requires the exact loopback host, port, database, user, password, schema, `NODE_ENV`, and integration marker. It then verifies PostgreSQL's dedicated cluster identity over the live connection. Redis requires the exact loopback target, ACL user, password, and database 15; the live connection verifies the ACL identity and selected database. `FLUSHDB` and `FLUSHALL` are disabled, and test cleanup deletes only keys under `integration:pf05d:`.
+Before any database reset, the guard requires the exact loopback host, port, database, user, password, schema, `NODE_ENV`, and integration marker. It then verifies PostgreSQL's dedicated cluster identity over the live connection. Redis requires the exact loopback target, ACL user, password, and database 15; the live connection verifies the ACL identity and selected database. `FLUSHDB` and `FLUSHALL` are disabled. Infrastructure smoke-test cleanup deletes only keys under `integration:pf05d:`; application-level auth cleanup removes only the auth/session key families it creates, after the same live Redis identity check.
 
 ## Developer workflow
 
@@ -37,4 +37,4 @@ To stop the services and explicitly delete the dedicated PostgreSQL volume and a
 npm run integration:clean
 ```
 
-The smoke suite verifies all committed migrations, Prisma record create/read/delete, Redis set/get/TTL expiry, namespaced cleanup, repeatability, and rejection of unsafe targets. It never calls external AI, email, or other network APIs.
+The complete suite verifies all committed migrations, Prisma record create/read/delete, Redis set/get/TTL expiry, namespaced cleanup, repeatability, unsafe-target rejection, and the real HTTP auth/session lifecycle. The runner first compiles the application with its production TypeScript settings so Nest receives the same emitted decorator metadata used by the deployable build. The auth tests use that compiled Nest/Fastify bootstrap with real PostgreSQL and Redis, replacing only the outbound email-delivery boundary so generated one-time tokens can be asserted without SMTP or Resend. The integration runner supplies explicit test-only application settings and disables external AI providers.

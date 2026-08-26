@@ -31,6 +31,61 @@ export interface IntegrationEnvironment {
   redisDatabase: number;
 }
 
+export const buildIntegrationTestProcessEnvironment = (
+  source: EnvironmentSource,
+): NodeJS.ProcessEnv => {
+  const environment = validateIntegrationEnvironment(source);
+
+  return {
+    ...source,
+    NODE_ENV: 'test',
+    INTEGRATION_TEST: 'true',
+    PORT: '0',
+    TRUST_PROXY: 'false',
+    APP_BASE_URL: 'http://127.0.0.1:3000',
+    FRONTEND_ORIGIN: 'http://127.0.0.1:3001',
+    FRONTEND_URL: 'http://127.0.0.1:3001',
+    DATABASE_URL: environment.databaseUrl,
+    REDIS_URL: environment.redisUrl,
+    SESSION_SECRET: 'pf05e-integration-session-secret-public-test-only',
+    SESSION_COOKIE_NAME: 'pf05e_session',
+    COOKIE_SECURE: 'false',
+    COOKIE_DOMAIN: '',
+    SESSION_TTL_SECONDS: '3600',
+    SESSION_IDLE_TTL_SECONDS: '1800',
+    AUTH_STATE_CACHE_TTL_SECONDS: '30',
+    MFA_ENCRYPTION_KEY: 'a5'.repeat(32),
+    MFA_ISSUER: 'Cyber Academy Integration Tests',
+    PASSWORD_RESET_TOKEN_TTL_MINUTES: '15',
+    EMAIL_VERIFICATION_TOKEN_TTL_HOURS: '24',
+    FORGOT_PASSWORD_MIN_DURATION_MS: '0',
+    EMAIL_PROVIDER: 'smtp',
+    RESEND_API_KEY: '',
+    MAIL_FROM: 'auth-integration@example.invalid',
+    APP_NAME: 'Cyber Academy Integration Tests',
+    MAIL_HOST: '',
+    MAIL_PORT: '',
+    MAIL_USER: '',
+    MAIL_PASS: '',
+    MFA_ATTEMPT_MAX_FAILURES: '5',
+    MFA_ATTEMPT_WINDOW_SECONDS: '900',
+    MFA_ATTEMPT_LOCK_SECONDS: '900',
+    LAB_ORCHESTRATOR_BASE_URL: 'http://127.0.0.1:59991',
+    LAB_ORCHESTRATOR_API_KEY: 'pf05e-integration-lab-key-public-test-only',
+    LAB_ORCHESTRATOR_TIMEOUT_MS: '1000',
+    LAB_PROXY_BASE_URL: 'http://127.0.0.1:59992',
+    GEMMA_PROVIDER: 'mock',
+    GEMMA_API_KEY: '',
+    GEMMA_MODEL: '',
+    OLLAMA_ENABLED: 'false',
+    OLLAMA_BASE_URL: 'http://127.0.0.1:59993',
+    OLLAMA_MODEL: 'integration-disabled',
+    OLLAMA_TIMEOUT_MS: '1000',
+    GEMINI_ENABLED: 'false',
+    AI_PROVIDER_PRIORITY: 'local-first',
+  };
+};
+
 export class IntegrationSafetyError extends Error {
   constructor(message: string) {
     super(`Refusing integration operation: ${message}`);
